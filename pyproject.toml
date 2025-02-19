@@ -1,0 +1,27 @@
+[project]
+name = "thesis"
+version = "0.0.1"
+dependencies = [
+    "datasets>=3.3.0",
+    "google-cloud-storage>=3.0.0",
+    "lightning>=2.5.0.post0",
+    "mlflow>=2.20.2",
+    "numpy>=2.2.3",
+    "pillow>=11.1.0",
+    "python-dotenv>=1.0.1",
+    "timm>=1.0.14",
+]
+
+[tool.pyright]
+venvPath= "."
+venv = ".venv"
+
+[tool.ruff]
+line-length = 88
+indent-width = 4
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.ruff.format]
+indent-style = "space"
