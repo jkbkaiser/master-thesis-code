@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from lightning.pytorch.callbacks import EarlyStopping
 from lightning.pytorch.loggers import MLFlowLogger
 
-from src.experiments.gbif_torch.lighting import LightningGBIF
+from src.experiments.gbif_baselines.lighting import LightningGBIF
 from src.shared.datasets import Dataset, DatasetType, DatasetVersion
 
 load_dotenv()

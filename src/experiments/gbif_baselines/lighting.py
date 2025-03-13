@@ -6,7 +6,7 @@ import torch
 import torch.optim as optim
 
 from src.constants import DEVICE
-from src.experiments.gbif_torch.models import HAC, MARG, MPLC, PLC
+from src.experiments.gbif_baselines.models import HAC, MARG, MPLC, PLC
 from src.shared.datasets import Dataset, DatasetType
 from src.shared.torch.t2t_vit.t2t_vit import t2t_vit_t_14
 from src.shared.torch.t2t_vit.utils import load_for_transfer_learning
