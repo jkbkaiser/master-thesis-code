@@ -1,32 +1,68 @@
 import argparse
+import os
 
 import lightning as L
+from dotenv import load_dotenv
 from lightning.pytorch.callbacks import EarlyStopping
 from lightning.pytorch.loggers import MLFlowLogger
 
 from src.experiments.gbif_torch.lighting import LightningGBIF
-from src.shared.datasets.gbif.dataset import load_gbif_dataloader
-from src.shared.datasets.gbif.taxonomy import (get_genus_to_species_mask,
-                                               get_species_to_genus_map)
+from src.shared.datasets import Dataset, DatasetType, DatasetVersion
 
-MLFLOW_SERVER = "http://localhost:5000"
-ARTIFACT_LOCATION = "./mlartifacts"
+load_dotenv()
+MLFLOW_SERVER = os.environ["MLFLOW_SERVER"]
 
-MODEL_TO_HYPERPARAMS = {
-    "hac": ("flat", 439),
-    "plc": ("hier", [2883, 6777]),
-    "mplc": ("hier", [2883, 6777]),
-    "marg": ("hier", 6777),
-}
+def get_num_classes(ds: Dataset):
+    if ds.type == DatasetType.GENUS_SPECIES:
+        return ds.labelcount_per_level
+    if ds.type == DatasetType.FLAT:
+        total = ds.labelcount_per_level[0]
+        split = ds.metadata["per_level"][0]["split"]
+        return split, total - split
+    raise Exception("could not retrieve num classes")
 
-# torch.Size([2883, 6777])
-
+def get_model_architecture(model, ds: Dataset):
+    if model == "plc" or model == "mplc" or model == "hac":
+        return ds.labelcount_per_level
+    if model == "marg":
+        return ds.labelcount_per_level[-1]
 
 def parse_args():
     parser = argparse.ArgumentParser(
         prog="Training script for gbif datasets",
         description="Train various models using different configurations using gbif datasets",
+
     )
+
+    parser.add_argument(
+        "--experiment-name", default="gbif_baselines", required=False, type=str
+    )
+
+    parser.add_argument(
+        "-d",
+        "--dataset",
+        required=True,
+        type=DatasetVersion,
+        choices=[v.value for v in DatasetVersion],
+    )
+
+    parser.add_argument(
+        "-m",
+        "--model",
+        default="hac",
+        required=False,
+        type=str,
+        choices=["hac", "plc", "mplc", "marg"],
+    )
+
+    parser.add_argument(
+        "--backbone",
+        default="t2t_vit",
+        required=False,
+        type=str,
+        choices=["t2t_vit", "vitaev2"],
+    )
+
     parser.add_argument(
         "-o",
         "--optimizer",
@@ -39,101 +75,56 @@ def parse_args():
         "-lr", "--learning-rate", default=1e-4, required=False, type=float
     )
     parser.add_argument(
-        "-wd", "--weight-decay", default=1e-2, required=False, type=float
+        "--weight-decay", default=1e-2, required=False, type=float
     )
     parser.add_argument(
-        "-m",
-        "--model",
-        default="hac",
-        required=False,
-        type=str,
-        choices=["hac", "plc", "mplc", "marg"],
+        "--freeze-backbone", default=True, required=False, type=bool
     )
-    parser.add_argument(
-        "-fb", "--freeze-backbone", default=True, required=False, type=bool
-    )
-    parser.add_argument(
-        "-b",
-        "--backbone",
-        default="t2t_vit",
-        required=False,
-        type=str,
-        choices=["t2t_vit", "vitaev2"],
-    )
-    parser.add_argument("-ee", "--eval-every", default=2, required=False, type=int)
-    parser.add_argument("-ne", "--num-epochs", default=50, required=False, type=int)
-    parser.add_argument("-sd", "--seed", default=42, required=False, type=int)
-    parser.add_argument("-bs", "--batch-size", default=16, required=False, type=int)
-    parser.add_argument(
-        "-lfc",
-        "--load-from-checkpoint",
-        default=None,
-        required=False,
-        type=str,
-    )
-    parser.add_argument(
-        "-name", "--experiment-name", default="gbif_torch", required=False, type=str
-    )
+    parser.add_argument("--num-epochs", default=50, required=False, type=int)
+    parser.add_argument("--batch-size", default=16, required=False, type=int)
+    parser.add_argument("--eval-every", default=2, required=False, type=int)
+    parser.add_argument("--seed", default=42, required=False, type=int)
+    parser.add_argument("--reload", default=False, required=False, type=bool)
 
     return parser.parse_args()
 
 
 def run(args):
-    ds, num_classes = MODEL_TO_HYPERPARAMS[args.model]
-
-    train_loader = load_gbif_dataloader(
-        "train", batch_size=args.batch_size, version=ds, use_torch=True
-    )
-    valid_loader = load_gbif_dataloader(
-        "valid", batch_size=args.batch_size, version=ds, use_torch=True
-    )
-
-    # t = get_genus_to_species_mask()
-    # t1 = get_species_to_genus_map()
-
-    # print(t.shape)
-    # # torch.Size([2883, 6777])
-    # print(t1.shape)
+    ds = Dataset(args.dataset)
+    ds.load(batch_size=args.batch_size, use_torch=True, reload=args.reload)
+    architecture = get_model_architecture(args.model, ds)
 
     mlf_logger = MLFlowLogger(
         experiment_name=args.experiment_name,
         tracking_uri=MLFLOW_SERVER,
-        artifact_location=ARTIFACT_LOCATION,
-        log_model="all",
+        log_model=True,
     )
 
     general_hparams = {
         "model_name": args.model,
         "optim_name": args.optimizer,
         "batch_size": args.batch_size,
-        "dataset": ds,
-        "load_from_checkpoint": args.load_from_checkpoint,
+        "dataset": args.dataset,
     }
+
     model_hparams = {
         "backbone_name": args.backbone,
-        "num_classes": num_classes,
+        "architecture": architecture,
         "freeze_backbone": args.freeze_backbone,
     }
 
+    if ds.type == DatasetType.FLAT:
+        model_hparams.update({"split": ds.split})
+
     optim_hparams = {"lr": args.learning_rate, "weight_decay": args.weight_decay}
 
-    if args.load_from_checkpoint:
-        model = LightningGBIF.load_from_checkpoint(
-            args.load_from_checkpoint,
-            model_name=args.model,
-            model_hparams=model_hparams,
-            optimizer_name=args.optimizer,
-            optimizer_hparams=optim_hparams,
-        )
-    else:
-        model = LightningGBIF(
-            model_name=args.model,
-            model_hparams=model_hparams,
-            optimizer_name=args.optimizer,
-            optimizer_hparams=optim_hparams,
-            num_classes_genus=2883,
-            num_classes_species=6777,
-        )
+    model = LightningGBIF(
+        model_name=args.model,
+        model_hparams=model_hparams,
+        optimizer_name=args.optimizer,
+        optimizer_hparams=optim_hparams,
+        ds=ds,
+    )
 
     mlf_logger.log_hyperparams(general_hparams)
     mlf_logger.log_hyperparams(model_hparams)
@@ -155,8 +146,7 @@ def run(args):
         profiler="simple",
     )
 
-    trainer.fit(model, train_loader, valid_loader)
-    # trainer.test(model, test_loader)
+    trainer.fit(model, ds.train_dataloader, ds.valid_dataloader)
 
 
 if __name__ == "__main__":

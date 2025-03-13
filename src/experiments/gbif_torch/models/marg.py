@@ -1,16 +1,17 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from src.shared.datasets.gbif.taxonomy import get_species_to_genus_map
+from src.constants import DEVICE
 
 
 class MARG(nn.Module):
-    def __init__(self, backbone, out_features, num_classes, **_):
+    def __init__(self, backbone, out_features, architecture, ds, **_):
         super().__init__()
         self.model = backbone
-        self.model.head = nn.Linear(out_features, num_classes)
+        self.model.head = nn.Linear(out_features, architecture)
         self.criterion = nn.CrossEntropyLoss()
-        self.species_to_genus_map = get_species_to_genus_map()
+        self.species2genus = torch.tensor(ds.hierarchy[0].T, device=DEVICE).argmax(dim=1)
 
     def forward(self, x):
         return self.model(x)
@@ -18,8 +19,8 @@ class MARG(nn.Module):
     def pred_fn(self, logits):
         species_probs = F.softmax(logits, dim=1)
         species_preds = species_probs.argmax(dim=1)
-        genus_preds = self.species_to_genus_map[species_preds]
+        genus_preds = self.species2genus[species_preds]
         return genus_preds, species_preds
 
-    def loss_fn(self, logits, genus_labels, species_labels):
+    def loss_fn(self, logits, _, species_labels):
         return self.criterion(logits, species_labels)

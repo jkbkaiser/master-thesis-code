@@ -3,10 +3,10 @@ import torch.nn.functional as F
 
 
 class ClassifierModule(nn.Module):
-    def __init__(self, out_features, num_classes):
+    def __init__(self, out_features, architecture):
         super().__init__()
         self.classifiers = nn.ModuleList(
-            [nn.Linear(out_features, nc) for nc in num_classes]
+            [nn.Linear(out_features, nc) for nc in architecture]
         )
 
     def forward(self, features):
@@ -14,10 +14,10 @@ class ClassifierModule(nn.Module):
 
 
 class PLC(nn.Module):
-    def __init__(self, backbone, out_features, num_classes, **_):
+    def __init__(self, backbone, out_features, architecture, **_):
         super().__init__()
         self.model = backbone
-        self.model.head = ClassifierModule(out_features, num_classes)
+        self.model.head = ClassifierModule(out_features, architecture)
         self.criterion = nn.CrossEntropyLoss()
 
     def forward(self, x):

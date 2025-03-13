@@ -1,14 +1,15 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from src.shared.datasets.gbif.taxonomy import get_genus_to_species_mask
+from src.constants import DEVICE
 
 
 class ClassifierModule(nn.Module):
-    def __init__(self, out_features, num_classes):
+    def __init__(self, out_features, architecture):
         super().__init__()
         self.classifiers = nn.ModuleList(
-            [nn.Linear(out_features, nc) for nc in num_classes]
+            [nn.Linear(out_features, nc) for nc in architecture]
         )
 
     def forward(self, features):
@@ -16,12 +17,12 @@ class ClassifierModule(nn.Module):
 
 
 class MPLC(nn.Module):
-    def __init__(self, backbone, out_features, num_classes, **_):
+    def __init__(self, backbone, out_features, architecture, ds, **_):
         super().__init__()
         self.model = backbone
-        self.model.head = ClassifierModule(out_features, num_classes)
+        self.model.head = ClassifierModule(out_features, architecture)
         self.criterion = nn.CrossEntropyLoss()
-        self.masks = get_genus_to_species_mask()
+        self.masks = torch.tensor(ds.hierarchy[0], device=DEVICE)
 
     def forward(self, x):
         return self.model(x)

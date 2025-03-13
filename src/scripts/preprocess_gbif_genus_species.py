@@ -1,22 +1,22 @@
 import argparse
 import json
 import os
+from collections import Counter
 from itertools import chain
 from pathlib import Path
 from typing import cast
 
 import numpy as np
 from datasets import DatasetDict, Features, Image, Value, load_dataset
-from dotenv import load_dotenv
 from google.cloud import storage
 
-load_dotenv()
+from src.constants import GOOGLE_BUCKET, GOOGLE_PROJECT
+from src.shared.datasets import DatasetVersion
 
-HUGGING_FACE_SOURCE_DATASET = "jkbkaiser/thesis-gbif-raw-large"
-HUGGING_FACE_PROCESSED_HIER_DATASET = "jkbkaiser/thesis-gbif-hier-large"
-GOOGLE_PROJECT = os.getenv("GOOGLE_PROJECT")
-GOOGLE_BUCKET_URL = os.getenv("GOOGLE_BUCKET_URL")
-BUCKET_NAME = "thesis-gbif-mappings-large"
+HUGGING_FACE_SOURCE_DATASET = "jkbkaiser/gbif_raw_10k"
+
+VERSION = DatasetVersion.GBIF_GENUS_SPECIES_10K
+HUGGING_FACE_PROCESSED_GENUS_SPECIES_DATASET = f"jkbkaiser/{VERSION.value}"
 
 DATA_DIR = Path("./data")
 GBIF_DATA_DIR = DATA_DIR / "gbif"
@@ -42,14 +42,17 @@ def extract_names(entry):
         "species": " ".join([name.lower() for name in name_parts]),
     }
 
-
-def upload_mappings(mappings, destination_blob_name):
+def upload_metadata(mappings, destination_blob_name):
+    d = (EXTRACTION_DIR / f"{VERSION.value}")
+    if not d.exists():
+        d.mkdir(parents=True)
     source_file_name = EXTRACTION_DIR / destination_blob_name
+
     with open(source_file_name, "w") as f:
         f.write(json.dumps(mappings))
 
     storage_client = storage.Client(GOOGLE_PROJECT)
-    bucket = storage_client.bucket(BUCKET_NAME)
+    bucket = storage_client.bucket(GOOGLE_BUCKET)
     blob = bucket.blob(destination_blob_name)
 
     if blob.exists():
@@ -60,23 +63,19 @@ def upload_mappings(mappings, destination_blob_name):
     blob.upload_from_filename(source_file_name, if_generation_match=None)
     print(f"File {source_file_name} uploaded to {destination_blob_name}.")
 
+def upload_hierarchies(hierarchies, blob_name):
+    d = (EXTRACTION_DIR / f"{VERSION.value}")
+    if not d.exists():
+        d.mkdir(parents=True)
+    source_file_name = EXTRACTION_DIR / blob_name
+    np.savez(source_file_name, data=hierarchies)
 
-def upload_numpy_array(mask, destination_blob_name):
-    source_file_name = EXTRACTION_DIR / destination_blob_name
-    with open(source_file_name, "wb") as f:
-        np.save(f, mask)
+    client = storage.Client(GOOGLE_PROJECT)
+    bucket = client.bucket(GOOGLE_BUCKET)
+    blob = bucket.blob(blob_name)
+    blob.upload_from_filename(source_file_name)
 
-    storage_client = storage.Client(GOOGLE_PROJECT)
-    bucket = storage_client.bucket(BUCKET_NAME)
-    blob = bucket.blob(destination_blob_name)
-
-    if blob.exists():
-        print("deleted existing blob")
-        blob.delete()
-
-    blob.cache_control = "no-store,no-cache,max-age=0"
-    blob.upload_from_filename(source_file_name, if_generation_match=None)
-    print(f"File {source_file_name} uploaded to {destination_blob_name}.")
+    print(f"File uploaded to gs://{GOOGLE_BUCKET}/{blob_name}")
 
 
 def get_genus_mapping(ds):
@@ -120,31 +119,22 @@ def extract_hierarchy(ds):
 
     num_species = len(species_to_genus)
     num_genus = len(genus_to_species)
-    genus_to_species_masks = np.zeros((num_genus, num_species))
+
+    genus_to_species_mask = np.zeros((num_genus, num_species))
 
     for key, values in genus_to_species.items():
         for value in values:
-            genus_to_species_masks[key, value] = 1
+            genus_to_species_mask[key, value] = 1
 
-    species_to_genus_mask = np.zeros(num_species, dtype=np.int32)
-    for key, value in species_to_genus.items():
-        species_to_genus_mask[key] = value
+    return [genus_to_species_mask]
 
-    return genus_to_species_masks, species_to_genus_mask
-
-
-def extract_frequencies(species):
-    num_samples = [5, 10, 50, 100, 500, 1000]
-    _, counts = np.unique(species, return_counts=True)
-
-    # Check that uniq is in order!
-
-    a = []
-    for n in num_samples:
-        mask = counts < n
-        a.append(mask)
-
-    return np.stack(a)
+def get_fequencies(dataset, key):
+    counts = Counter()
+    for split in dataset.keys():
+        for example in dataset[split]:
+            val = example[key]
+            counts[val] += 1
+    return dict(counts)
 
 
 def run(_):
@@ -205,9 +195,7 @@ def run(_):
     most_occuring_species = id2species[label]
     print(f"most occuring species after mapping: {most_occuring_species}")
 
-    freq = extract_frequencies(species)
-
-    genus_to_species_mask, species_to_genus_mask = extract_hierarchy(ds)
+    hierarchy = extract_hierarchy(ds)
 
     ds_train_validtest = ds["data"].train_test_split(test_size=0.2, seed=42)
     ds_validtest = ds_train_validtest["test"].train_test_split(test_size=0.5, seed=42)
@@ -219,20 +207,29 @@ def run(_):
         }
     )
 
-    ds_dict.push_to_hub(HUGGING_FACE_PROCESSED_HIER_DATASET, private=True)
+    species_freq = get_fequencies(ds_dict, "species")
+    genus_freq = get_fequencies(ds_dict, "genus")
 
-    mappings = {
-        "id2species": id2species,
-        "species2id": species2id,
-        "id2genus": id2genus,
-        "genus2id": genus2id,
+    ds_dict.push_to_hub(HUGGING_FACE_PROCESSED_GENUS_SPECIES_DATASET, private=True)
+
+    metadata = {
+        "per_level": [
+            {
+                "id2label": id2genus,
+                "count": len(id2genus),
+                "frequencies": genus_freq,
+            },
+            {
+                "id2label": id2species,
+                "count": len(id2species),
+                "frequencies": species_freq,
+            },
+        ],
     }
 
-    upload_mappings(mappings, "mappings_per_level.json")
+    upload_metadata(metadata, f"{VERSION.value}/metadata.json")
+    upload_hierarchies(hierarchies=hierarchy, blob_name=f"{VERSION.value}/hierarchy.npz")
 
-    upload_numpy_array(freq, "freq.npy")
-    upload_numpy_array(species_to_genus_mask, "species_to_genus.npy")
-    upload_numpy_array(genus_to_species_mask, "genus_to_species.npy")
 
 
 def parse_args():

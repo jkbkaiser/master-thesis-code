@@ -7,7 +7,7 @@ import torch.optim as optim
 
 from src.constants import DEVICE
 from src.experiments.gbif_torch.models import HAC, MARG, MPLC, PLC
-from src.shared.datasets.gbif.frequency import get_freq_mask
+from src.shared.datasets import Dataset, DatasetType
 from src.shared.torch.t2t_vit.t2t_vit import t2t_vit_t_14
 from src.shared.torch.t2t_vit.utils import load_for_transfer_learning
 from src.shared.torch.vitaev2.ViTAEv2 import ViTAEv2_B
@@ -26,7 +26,7 @@ MODEL_DICT = {"hac": HAC, "plc": PLC, "mplc": MPLC, "marg": MARG}
 torch.set_float32_matmul_precision("medium")
 
 
-def create_model(model_name, model_hparams):
+def create_model(model_name, model_hparams, ds):
     # Load pretrained weights
     init, path_to_weights, out_features = BACKBONE_DICT[model_hparams["backbone_name"]]
     backbone = init()
@@ -39,7 +39,7 @@ def create_model(model_name, model_hparams):
 
     # Initialize model
     cls = MODEL_DICT[model_name]
-    model = cls(backbone, out_features, **model_hparams)
+    model = cls(backbone, out_features, **model_hparams, ds=ds)
 
     if model_hparams["freeze_backbone"]:
         for param in model.model.parameters():
@@ -50,6 +50,14 @@ def create_model(model_name, model_hparams):
 
     return model
 
+def get_num_classes(ds: Dataset):
+    if ds.type == DatasetType.GENUS_SPECIES:
+        return ds.labelcount_per_level
+    if ds.type == DatasetType.FLAT:
+        total = ds.labelcount_per_level[0]
+        split = ds.metadata["per_level"][0]["split"]
+        return split, total - split
+    raise Exception("could not retrieve num classes")
 
 class LightningGBIF(L.LightningModule):
     def __init__(
@@ -58,29 +66,32 @@ class LightningGBIF(L.LightningModule):
         model_hparams,
         optimizer_name,
         optimizer_hparams,
-        num_classes_species,
-        num_classes_genus,
+        ds: Dataset,
         thresholds=[5, 10, 50, 100, 500, 1000],
     ):
         super().__init__()
+        self.ds = ds
         self.optimizer_name = optimizer_name
         self.optimizer_hparams = optimizer_hparams
-        self.model = create_model(model_name, model_hparams)
+        self.model = create_model(model_name, model_hparams, ds)
 
         self.pred_fn = self.model.pred_fn
         self.loss_fn = self.model.loss_fn
 
-        self.num_classes_species = num_classes_species
-        self.num_classes_genus = num_classes_genus
+        [self.num_classes_genus, self.num_classes_species] = get_num_classes(ds)
+        print(self.num_classes_genus, self.num_classes_species)
 
-        self.freq = get_freq_mask()
         self.thresholds = thresholds
 
         self.valid_conf_m = torch.zeros(
-            (num_classes_species, num_classes_species), dtype=torch.int64
+            (self.num_classes_species, self.num_classes_species), dtype=torch.int64
         ).to(DEVICE)
 
     def compute_valid_conf_m(self, species_preds, species_labels):
+        if self.ds.type == DatasetType.FLAT:
+            species_preds = species_preds - self.ds.split
+            species_labels = species_labels - self.ds.split
+
         self.valid_conf_m.index_add_(
             0,
             species_labels.view(-1),
@@ -122,13 +133,18 @@ class LightningGBIF(L.LightningModule):
 
         genus_preds, species_preds = self.pred_fn(logits)
 
-        acc_genus = (genus_preds == genus_labels).float().mean().item()
-        acc_species = (species_preds == species_labels).float().mean().item()
+        correct_genus = genus_preds == genus_labels
+        acc_genus = correct_genus.float().mean().item()
+        correct_species = species_preds == species_labels
+        acc_species = correct_species.float().mean().item()
+        correct_both = correct_species & correct_genus
+        total_acc = correct_both.float().mean().item()
 
         metrics = {
             "accuracy_genus": acc_genus,
             "accuracy_species": acc_species,
-            "accuracy_total": (acc_genus + acc_species) / 2,
+            "accuracy_avg": (acc_genus + acc_species) / 2,
+            "accuracy_total": total_acc,
         }
 
         self.log_epoch(metrics, "train_")
@@ -144,18 +160,18 @@ class LightningGBIF(L.LightningModule):
         acc_genus = correct_genus.float().mean().item()
         correct_species = species_preds == species_labels
         acc_species = correct_species.float().mean().item()
-
         correct_both = correct_species & correct_genus
-        hier_acc = correct_both.float().mean().item()
+        total_acc = correct_both.float().mean().item()
 
         metrics = {
             "accuracy_genus": acc_genus,
             "accuracy_species": acc_species,
-            "accuracy_total": (acc_genus + acc_species) / 2,
-            "accuracy_hier": hier_acc,
+            "accuracy_avg": (acc_genus + acc_species) / 2,
+            "accuracy_total": total_acc,
         }
 
         self.log_epoch(metrics, "valid_")
+
         self.compute_valid_conf_m(species_preds, species_labels)
 
     def on_validation_epoch_end(self):
@@ -186,28 +202,28 @@ class LightningGBIF(L.LightningModule):
             "valid_f1_species": f1,
         }
 
-        for threshold_idx in range(self.freq.shape[0]):
-            freq_mask = self.freq[threshold_idx]
-            valid_freq_mask = freq_mask & appeared_classes
-
-            if valid_freq_mask.any():
-                recall_low_freq = recall_per_class[valid_freq_mask].mean()
-                precision_low_freq = precision_per_class[valid_freq_mask].mean()
-                f1_low_freq = f1_per_class[valid_freq_mask].mean()
-            else:
-                recall_low_freq = torch.tensor(0.0, device=self.device)
-                precision_low_freq = torch.tensor(0.0, device=self.device)
-                f1_low_freq = torch.tensor(0.0, device=self.device)
-
-            metrics[
-                f"valid_precision_species_less_freq_{self.thresholds[threshold_idx]}"
-            ] = precision_low_freq
-            metrics[
-                f"valid_recall_species_less_freq_{self.thresholds[threshold_idx]}"
-            ] = recall_low_freq
-            metrics[f"valid_f1_species_less_freq_{self.thresholds[threshold_idx]}"] = (
-                f1_low_freq
-            )
-
+        # for threshold_idx in range(self.freq.shape[0]):
+        #     freq_mask = self.freq[threshold_idx]
+        #     valid_freq_mask = freq_mask & appeared_classes
+        #
+        #     if valid_freq_mask.any():
+        #         recall_low_freq = recall_per_class[valid_freq_mask].mean()
+        #         precision_low_freq = precision_per_class[valid_freq_mask].mean()
+        #         f1_low_freq = f1_per_class[valid_freq_mask].mean()
+        #     else:
+        #         recall_low_freq = torch.tensor(0.0, device=self.device)
+        #         precision_low_freq = torch.tensor(0.0, device=self.device)
+        #         f1_low_freq = torch.tensor(0.0, device=self.device)
+        #
+        #     metrics[
+        #         f"valid_precision_species_less_freq_{self.thresholds[threshold_idx]}"
+        #     ] = precision_low_freq
+        #     metrics[
+        #         f"valid_recall_species_less_freq_{self.thresholds[threshold_idx]}"
+        #     ] = recall_low_freq
+        #     metrics[f"valid_f1_species_less_freq_{self.thresholds[threshold_idx]}"] = (
+        #         f1_low_freq
+        #     )
+        #
         self.log_dict(metrics)
         self.valid_conf_m.zero_()

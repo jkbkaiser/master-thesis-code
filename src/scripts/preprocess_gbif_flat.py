@@ -1,20 +1,20 @@
 import argparse
 import json
-import os
+from collections import Counter
 from pathlib import Path
 from typing import cast
 
 import numpy as np
 from datasets import DatasetDict, Features, Image, Value, load_dataset
-from dotenv import load_dotenv
 from google.cloud import storage
 
-load_dotenv()
-HUGGING_FACE_SOURCE_DATASET = "jkbkaiser/thesis-gbif-raw-large"
-HUGGING_FACE_PROCESSED_FLAT_DATASET = "jkbkaiser/thesis-gbif-flat-large"
-GOOGLE_PROJECT = os.getenv("GOOGLE_PROJECT")
-GOOGLE_BUCKET_URL = os.getenv("GOOGLE_BUCKET_URL")
-BUCKET_NAME = "thesis-gbif-mappings-large"
+from src.constants import GOOGLE_BUCKET, GOOGLE_PROJECT
+from src.shared.datasets import DatasetVersion
+
+HUGGING_FACE_SOURCE_DATASET = "jkbkaiser/gbif_raw_10k"
+
+VERSION = DatasetVersion.GBIF_FLAT_10K
+HUGGING_FACE_PROCESSED_FLAT_DATASET = f"jkbkaiser/{VERSION.value}"
 
 DATA_DIR = Path("./data")
 GBIF_DATA_DIR = DATA_DIR / "gbif"
@@ -25,13 +25,17 @@ def valid_species(entry):
     return len(entry["species"].split(" ")) >= 2
 
 
-def upload_mappings(mappings, destination_blob_name):
+def upload_metadata(mappings, destination_blob_name):
+    d = (EXTRACTION_DIR / f"{VERSION.value}")
+    if not d.exists():
+        d.mkdir(parents=True)
     source_file_name = EXTRACTION_DIR / destination_blob_name
+
     with open(source_file_name, "w") as f:
         f.write(json.dumps(mappings))
 
     storage_client = storage.Client(GOOGLE_PROJECT)
-    bucket = storage_client.bucket(BUCKET_NAME)
+    bucket = storage_client.bucket(GOOGLE_BUCKET)
     blob = bucket.blob(destination_blob_name)
 
     if blob.exists():
@@ -72,13 +76,24 @@ def get_flat_mapping(ds):
     return id2labels, labels2id, split
 
 
+def get_fequencies(dataset):
+    counts = Counter()
+    for split in dataset.keys():
+        for example in dataset[split]:
+            species = example['species']
+            genus = example['genus']
+            counts[species] += 1
+            counts[genus] += 1
+    return dict(counts)
+
+
 def map_to_label(row, labels2id):
     row["genus"] = labels2id[row["genus"].lower()]
     row["species"] = labels2id[row["species"].lower()]
     return row
 
 
-def run(_):
+def run(args):
     ds: DatasetDict = cast(DatasetDict, load_dataset(HUGGING_FACE_SOURCE_DATASET))
     ds = ds.filter(valid_species)
 
@@ -151,12 +166,20 @@ def run(_):
 
     ds_dict.push_to_hub(HUGGING_FACE_PROCESSED_FLAT_DATASET, private=True)
 
-    flat_mappings = {
-        "id2labels": id2label,
-        "labels2id": label2id,
-        "split": split,
+    freq = get_fequencies(ds_dict)
+
+    metadata = {
+        "per_level": [
+            {
+                "id2label": id2label,
+                "count": len(id2label),
+                "split": split,
+                "frequencies": freq,
+            },
+        ],
     }
-    upload_mappings(flat_mappings, "flat_mapping.json")
+
+    upload_metadata(metadata, f"{VERSION.value}/metadata.json")
 
 
 def parse_args():

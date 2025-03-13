@@ -19,7 +19,7 @@ GBIF_DATA_DIR = DATA_DIR / "gbif"
 HF_DATA_DIR = DATA_DIR / "hf"
 HF_IMG_DIR = HF_DATA_DIR / "images"
 
-HUGGING_FACE_DATASET = "jkbkaiser/thesis-gbif-raw-large"
+HUGGING_FACE_DATASET = "jkbkaiser/gbif_raw_10k"
 
 DF_FIELDS = [
     # "kingdomKey",
@@ -211,7 +211,7 @@ def preprocess_dataset(ds):
     )
 
     ds = ds.cast(features)
-    ds = ds.map(preprocess_entry)
+    # ds = ds.map(preprocess_entry)
 
     def valid_image_shape(row):
         return row["image"].mode == "RGB"
