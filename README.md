@@ -31,5 +31,5 @@ The experiments folder contains the task-specific code. Each task has its own tr
 
 # Examples
 
-`python -m experiments.gbif_jax.train`
+`python -m experiments.gbif_jax.train --help`
 
