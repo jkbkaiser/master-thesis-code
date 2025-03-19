@@ -19,8 +19,13 @@ class ClassifierModule(nn.Module):
 class MPLC(nn.Module):
     def __init__(self, backbone, out_features, architecture, ds, **_):
         super().__init__()
-        self.model = backbone
-        self.model.head = ClassifierModule(out_features, architecture)
+
+        if backbone is not None:
+            self.model = backbone
+            self.model.head = ClassifierModule(out_features, architecture)
+        else:
+            self.model = ClassifierModule(out_features, architecture)
+
         self.criterion = nn.CrossEntropyLoss()
         self.masks = torch.tensor(ds.hierarchy[0], device=DEVICE)
 

@@ -12,15 +12,6 @@ from src.shared.datasets import Dataset, DatasetType, DatasetVersion
 load_dotenv()
 MLFLOW_SERVER = os.environ["MLFLOW_SERVER"]
 
-def get_num_classes(ds: Dataset):
-    if ds.type == DatasetType.GENUS_SPECIES:
-        return ds.labelcount_per_level
-    if ds.type == DatasetType.FLAT:
-        total = ds.labelcount_per_level[0]
-        split = ds.metadata["per_level"][0]["split"]
-        return split, total - split
-    raise Exception("could not retrieve num classes")
-
 def get_model_architecture(model, ds: Dataset):
     if model == "plc" or model == "mplc" or model == "hac":
         return ds.labelcount_per_level
@@ -104,7 +95,7 @@ def run(args):
         "model_name": args.model,
         "optim_name": args.optimizer,
         "batch_size": args.batch_size,
-        "dataset": args.dataset,
+        "dataset": args.dataset.value,
     }
 
     model_hparams = {

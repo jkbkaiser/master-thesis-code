@@ -8,8 +8,13 @@ from src.constants import DEVICE
 class MARG(nn.Module):
     def __init__(self, backbone, out_features, architecture, ds, **_):
         super().__init__()
-        self.model = backbone
-        self.model.head = nn.Linear(out_features, architecture)
+
+        if backbone is not None:
+            self.model = backbone
+            self.model.head = nn.Linear(out_features, architecture)
+        else:
+            self.model = nn.Linear(out_features, architecture)
+
         self.criterion = nn.CrossEntropyLoss()
         self.species2genus = torch.tensor(ds.hierarchy[0].T, device=DEVICE).argmax(dim=1)
 

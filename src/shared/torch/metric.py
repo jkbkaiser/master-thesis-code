@@ -1,0 +1,100 @@
+import torch
+
+from src.constants import DEVICE
+from src.shared.datasets import DatasetType
+
+
+class Metric():
+    def __init__(self, ds, num_genus: int, num_species: int):
+        self.ds = ds
+        self.num_genus = num_genus
+        self.num_species = num_species
+
+        if self.ds.type == DatasetType.FLAT:
+            self.split = self.ds.metadata["per_level"][0]["split"]
+            freq = self.ds.frequencies[0][self.split:]
+        else:
+            freq = self.ds.frequencies[1]
+
+        self.freq = freq.to(DEVICE)
+
+        self.reset()
+
+    def reset(self):
+        self.valid_conf_m = torch.zeros((self.num_species, self.num_species), dtype=torch.int64).to(DEVICE)
+
+    def process_train_batch(self, genus_preds, genus_labels, species_preds, species_labels):
+        correct_genus = genus_preds == genus_labels
+        correct_species = species_preds == species_labels
+        correct_both = correct_species & correct_genus
+
+        acc_genus = correct_genus.float().mean().item()
+        acc_species = correct_species.float().mean().item()
+        acc_all = correct_both.float().mean().item()
+
+        batch_metrics = {
+            "accuracy_genus": acc_genus,
+            "accuracy_species": acc_species,
+            "accuracy_avg": (acc_genus + acc_species) / 2,
+            "accuracy_all": acc_all,
+        }
+
+        return batch_metrics
+
+    def compute_valid_conf_m(self, species_preds, species_labels):
+        if self.ds.type == DatasetType.FLAT:
+            species_preds = species_preds - self.ds.split
+            species_labels = species_labels - self.ds.split
+
+        self.valid_conf_m.index_add_(
+            0,
+            species_labels.view(-1),
+            torch.eye(self.num_species, device=DEVICE)[
+                species_preds.view(-1)
+            ].to(torch.int64),
+        )
+
+    def process_valid_batch(self, genus_preds, genus_labels, species_preds, species_labels):
+        correct_genus = genus_preds == genus_labels
+        correct_species = species_preds == species_labels
+        correct_both = correct_species & correct_genus
+
+        acc_genus = correct_genus.float().mean().item()
+        acc_species = correct_species.float().mean().item()
+        acc_all = correct_both.float().mean().item()
+
+        batch_metrics = {
+            "accuracy_genus": acc_genus,
+            "accuracy_species": acc_species,
+            "accuracy_avg": (acc_genus + acc_species) / 2,
+            "accuracy_all": acc_all,
+        }
+
+        self.compute_valid_conf_m(species_preds, species_labels)
+
+        return batch_metrics
+
+    def compute_recall(self):
+        matrix = self.valid_conf_m
+
+        tp_per_class = torch.diag(matrix)
+        fn_per_class = matrix.sum(dim=1) - tp_per_class
+
+        recalls = {}
+
+        for k in [5, 10, 50, 100]:
+            mask = self.freq <= k  # Select species with occurrence ≤ k
+
+            tp = (tp_per_class * mask).sum()
+            fn = (fn_per_class * mask).sum()
+
+            recall = tp / (tp + fn).clamp(min=1)
+            recalls[str(k)] = recall.item()
+
+        tp = (tp_per_class).sum()
+        fn = (fn_per_class).sum()
+
+        recall = tp / (tp + fn).clamp(min=1)
+        recalls["all"] = recall.item()
+
+        return recalls

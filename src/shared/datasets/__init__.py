@@ -18,6 +18,7 @@ class DatasetSplit(str, Enum):
     VALID = "valid"
     TEST = "test"
 
+
 class DatasetType(str, Enum):
     FLAT = "FLAT"
     GENUS_SPECIES = "GENUS_SPECIES"
@@ -25,15 +26,19 @@ class DatasetType(str, Enum):
 
 class DatasetVersion(str, Enum):
     GBIF_FLAT_10K = "gbif_flat_10k"
+    GBIF_FLAT_10K_EMBEDDINGS = "gbif_flat_10k_embeddings"
     GBIF_FLAT_100K = "gbif_flat_100k"
     GBIF_GENUS_SPECIES_10K = "gbif_genus_species_10k"
+    GBIF_GENUS_SPECIES_10K_EMBEDDINGS = "gbif_genus_species_10k_embeddings"
     GBIF_GENUS_SPECIES_100K = "gbif_genus_species_100k"
 
 
 VERSION_TO_TYPE = {
     DatasetVersion.GBIF_FLAT_10K: DatasetType.FLAT,
+    DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS: DatasetType.FLAT,
     DatasetVersion.GBIF_FLAT_100K: DatasetType.FLAT,
     DatasetVersion.GBIF_GENUS_SPECIES_10K: DatasetType.GENUS_SPECIES,
+    DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS: DatasetType.GENUS_SPECIES,
     DatasetVersion.GBIF_GENUS_SPECIES_100K: DatasetType.GENUS_SPECIES,
 }
 
@@ -50,7 +55,11 @@ class CustomDataset(data.Dataset):
     def __getitem__(self, index):
         elem = self.data[index]
 
-        img = self.transform(elem["image"], self.use_torch)
+        img = elem["image"]
+
+        if self.transform:
+            img = self.transform(img, self.use_torch)
+
         genus_label = (
             elem["genus"] if self.use_torch else np.array(elem["genus"], dtype=np.int32)
         )
@@ -92,6 +101,7 @@ class Dataset():
 
         self.train_dataloader = self._get_dataloader(DatasetSplit.TRAIN)
         self.valid_dataloader = self._get_dataloader(DatasetSplit.VALID)
+        self.test_dataloader = self._get_dataloader(DatasetSplit.TEST)
 
         print("Loading metadata")
 
@@ -148,10 +158,14 @@ class Dataset():
         return dataloader
 
     def _image_to_tensor_train(self, img, use_torch=False):
+        if self.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS, DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS]:
+            return img
         transformed_img = self.train_transform(img.float())
         return transformed_img if use_torch else transformed_img.numpy()
 
     def _image_to_tensor(self, img, use_torch=False):
+        if self.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS, DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS]:
+            return img
         transformed_img = self.transform(img.float())
         return transformed_img if use_torch else transformed_img.numpy()
 
