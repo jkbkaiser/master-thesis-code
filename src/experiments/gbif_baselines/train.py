@@ -1,7 +1,9 @@
 import argparse
+import logging
 import os
 
 import lightning as L
+import mlflow
 from dotenv import load_dotenv
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import MLFlowLogger
@@ -98,6 +100,7 @@ def run(args):
         "optim_name": args.optimizer,
         "batch_size": args.batch_size,
         "dataset": args.dataset.value,
+        "epochs": args.num_epochs,
     }
 
     model_hparams = {
@@ -132,7 +135,7 @@ def run(args):
     )
 
     checkpoint_callback = ModelCheckpoint(
-        dirpath=f'{CHECKPOINT_DIR}/{mlf_logger.experiment_id}',
+        dirpath=f'{CHECKPOINT_DIR}/{mlf_logger.experiment_id}/{mlf_logger.run_id}',
         filename='{epoch}'
     )
 
@@ -142,7 +145,12 @@ def run(args):
         logger=mlf_logger,
         callbacks=[early_stop_callback, checkpoint_callback],
         profiler="simple",
+        enable_progress_bar=False,
     )
+
+    logging.getLogger("lightning.pytorch").setLevel(logging.FATAL)
+
+    print(f"Training for {args.num_epochs} epochs")
 
     trainer.fit(model, ds.train_dataloader, ds.valid_dataloader)
 
