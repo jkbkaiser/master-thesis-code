@@ -3,7 +3,7 @@ import os
 
 import lightning as L
 from dotenv import load_dotenv
-from lightning.pytorch.callbacks import EarlyStopping
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import MLFlowLogger
 
 from src.experiments.gbif_baselines.lighting import LightningGBIF
@@ -11,6 +11,7 @@ from src.shared.datasets import Dataset, DatasetType, DatasetVersion
 
 load_dotenv()
 MLFLOW_SERVER = os.environ["MLFLOW_SERVER"]
+CHECKPOINT_DIR = os.environ["CHECKPOINT_DIR"]
 
 def get_model_architecture(model, ds: Dataset):
     if model == "plc" or model == "mplc" or model == "hac":
@@ -88,6 +89,7 @@ def run(args):
     mlf_logger = MLFlowLogger(
         experiment_name=args.experiment_name,
         tracking_uri=MLFLOW_SERVER,
+        artifact_location="file:./logs/mlruns",
         log_model=True,
     )
 
@@ -129,11 +131,16 @@ def run(args):
         mode="min",
     )
 
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=f'{CHECKPOINT_DIR}/{mlf_logger.experiment_id}',
+        filename='epoch-{epoch}'
+    )
+
     trainer = L.Trainer(
         max_epochs=args.num_epochs,
         log_every_n_steps=args.eval_every,
         logger=mlf_logger,
-        callbacks=[early_stop_callback],
+        callbacks=[early_stop_callback, checkpoint_callback],
         profiler="simple",
     )
 
