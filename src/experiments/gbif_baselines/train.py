@@ -133,7 +133,7 @@ def run(args):
 
     checkpoint_callback = ModelCheckpoint(
         dirpath=f'{CHECKPOINT_DIR}/{mlf_logger.experiment_id}',
-        filename='epoch-{epoch}'
+        filename='{epoch}'
     )
 
     trainer = L.Trainer(
