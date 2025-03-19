@@ -5,7 +5,7 @@
 #SBATCH --job-name=TrainPLC
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=9
-#SBATCH --time=00:05:00
+#SBATCH --time=00:30:00
 #SBATCH --output=./logs/job_outputs/slurm_output_%A.out
 
 module purge
@@ -13,4 +13,4 @@ module load 2024
 
 source .env
 source .venv/bin/activate
-python -m src.experiments.gbif_baselines.train -d gbif_genus_species_10k_embeddings -m plc --num-epochs 10
+python -m src.experiments.gbif_baselines.train -d gbif_genus_species_10k -m plc --num-epochs 10 --no-freeze-backbone
