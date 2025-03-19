@@ -7,6 +7,7 @@ data
 mlruns
 mlartifacts
 pretrained_weights
+job_outputs
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
