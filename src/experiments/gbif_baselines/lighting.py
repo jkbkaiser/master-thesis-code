@@ -48,11 +48,12 @@ def create_model(model_name, model_hparams, ds):
         pass
     else:
         if model_hparams["freeze_backbone"]:
+            print("Freezing backbone")
             for param in model.model.parameters():
                 param.requires_grad = False
 
-        for param in model.model.head.parameters():
-            param.requires_grad = True
+            for param in model.model.head.parameters():
+                param.requires_grad = True
 
     return model
 

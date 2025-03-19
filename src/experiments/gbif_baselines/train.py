@@ -72,8 +72,12 @@ def parse_args():
         "--weight-decay", default=1e-2, required=False, type=float
     )
     parser.add_argument(
-        "--freeze-backbone", default=True, required=False, type=bool
+        "--freeze-backbone", action="store_true", help="Freeze backbone during training"
     )
+    parser.add_argument(
+        "--no-freeze-backbone", dest="freeze_backbone", action="store_false", help="Unfreeze backbone"
+    )
+    parser.set_defaults(freeze_backbone=True)
     parser.add_argument("--num-epochs", default=50, required=False, type=int)
     parser.add_argument("--batch-size", default=16, required=False, type=int)
     parser.add_argument("--eval-every", default=2, required=False, type=int)
@@ -91,7 +95,6 @@ def run(args):
     mlf_logger = MLFlowLogger(
         experiment_name=args.experiment_name,
         tracking_uri=MLFLOW_SERVER,
-        artifact_location="file:./logs/mlruns",
         log_model=True,
     )
 
