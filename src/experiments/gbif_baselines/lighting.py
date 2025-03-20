@@ -32,7 +32,11 @@ def create_model(model_name, model_hparams, ds):
     else:
         # Load pretrained weights
         init, path_to_weights, out_features = BACKBONE_DICT[model_hparams["backbone_name"]]
-        backbone = init()
+        backbone = init(
+            drop_rate=0.1,
+            attn_drop_rate=0.1,
+            drop_path_rate=0.1,
+        )
         load_for_transfer_learning(
             backbone,
             path_to_weights,
