@@ -7,8 +7,11 @@ import torch.optim as optim
 
 from src.experiments.gbif_baselines.models import HAC, MARG, MPLC, PLC
 from src.shared.datasets import Dataset, DatasetType, DatasetVersion
-from src.shared.torch.backbones import (ViTAEv2_B, load_for_transfer_learning,
-                                        t2t_vit_t_14)
+from src.shared.torch.backbones import (
+    ViTAEv2_B,
+    load_for_transfer_learning,
+    t2t_vit_t_14,
+)
 from src.shared.torch.metric import Metric
 
 PRETRAINED_WEIGHTS_DIR = Path(os.getcwd()) / "pretrained_weights"
