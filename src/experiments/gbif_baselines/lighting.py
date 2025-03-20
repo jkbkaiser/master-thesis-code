@@ -47,6 +47,7 @@ def create_model(model_name, model_hparams, ds):
     if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS, DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS]:
         pass
     else:
+
         if model_hparams["freeze_backbone"]:
             print("Freezing backbone")
             for param in model.model.parameters():

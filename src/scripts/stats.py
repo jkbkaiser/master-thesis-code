@@ -8,7 +8,7 @@ import seaborn as sns
 from src.constants import NUM_PROC
 from src.shared.datasets import DatasetVersion
 
-VERSION = DatasetVersion.GBIF_GENUS_SPECIES_10K
+VERSION = DatasetVersion.GBIF_GENUS_SPECIES_100K
 
 
 path = f"jkbkaiser/{VERSION.value}"
@@ -54,7 +54,7 @@ for text in texts + autotexts:
 plt.title("Distribution of Species by Occurrence Frequency", fontsize=14, fontweight="bold")
 
 # Save or show plot
-plt.savefig("species_distribution.png", dpi=300, bbox_inches="tight")  # Save high-quality image
+plt.savefig("species_distribution_100k.png", dpi=300, bbox_inches="tight")  # Save high-quality image
 plt.show()
 
 total_samples = len(all_species)
@@ -88,5 +88,5 @@ for text in texts + autotexts:
 plt.title("Distribution of Samples by Species Occurrence Frequency", fontsize=14, fontweight="bold")
 
 # Save or show plot
-plt.savefig("sample_distribution.png", dpi=300, bbox_inches="tight")  # Save high-quality image
+plt.savefig("sample_distribution_100k.png", dpi=300, bbox_inches="tight")  # Save high-quality image
 plt.show()

@@ -118,11 +118,12 @@ class Dataset():
             self.split = int(self.metadata["per_level"][0]["split"])
 
         self.train_transform = transforms.Compose([
-            transforms.RandomRotation(10),
+            transforms.RandomRotation(30),
             transforms.Resize(256),
-            transforms.RandomCrop(224, padding=3),
+            transforms.RandomCrop(224, padding=2),
             transforms.Lambda(lambda x: x / 255.0),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            transforms.RandomErasing(p=0.5, scale=(0.02, 0.1), ratio=(0.3, 3.3), value=0),
         ])
 
         self.transform = transforms.Compose([

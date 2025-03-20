@@ -3,7 +3,6 @@ import logging
 import os
 
 import lightning as L
-import mlflow
 from dotenv import load_dotenv
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import MLFlowLogger
@@ -66,7 +65,7 @@ def parse_args():
         choices=["adam", "sgd"],
     )
     parser.add_argument(
-        "-lr", "--learning-rate", default=1e-4, required=False, type=float
+        "-lr", "--learning-rate", default=1e-5, required=False, type=float
     )
     parser.add_argument(
         "--weight-decay", default=1e-2, required=False, type=float

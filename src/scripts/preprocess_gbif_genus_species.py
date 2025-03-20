@@ -1,6 +1,5 @@
 import argparse
 import json
-import os
 from collections import Counter
 from itertools import chain
 from pathlib import Path
@@ -10,12 +9,12 @@ import numpy as np
 from datasets import DatasetDict, Features, Image, Value, load_dataset
 from google.cloud import storage
 
-from src.constants import GOOGLE_BUCKET, GOOGLE_PROJECT
+from src.constants import GOOGLE_BUCKET, GOOGLE_PROJECT, NUM_PROC
 from src.shared.datasets import DatasetVersion
 
-HUGGING_FACE_SOURCE_DATASET = "jkbkaiser/gbif_raw_10k"
+HUGGING_FACE_SOURCE_DATASET = "jkbkaiser/gbif_raw_100k"
 
-VERSION = DatasetVersion.GBIF_GENUS_SPECIES_10K
+VERSION = DatasetVersion.GBIF_GENUS_SPECIES_100K
 HUGGING_FACE_PROCESSED_GENUS_SPECIES_DATASET = f"jkbkaiser/{VERSION.value}"
 
 DATA_DIR = Path("./data")
@@ -28,6 +27,25 @@ if not EXTRACTION_DIR.exists():
 
 def valid_species(entry):
     return len(entry["species"].split(" ")) >= 2
+
+
+def extract_names_batched(batch):
+    names = batch["species"]
+    genus = []
+    species = []
+
+    for name in names:
+        name_parts = name.split(" ")
+        if len(name_parts) < 2:
+            genus.append("")
+            species.append("")
+        else:
+            genus.append(name_parts[0].lower())
+            species.append(" ".join([part.lower() for part in name_parts]))
+
+    batch["genus"] = genus
+    batch["species"] = species
+    return batch
 
 
 def extract_names(entry):
@@ -139,8 +157,7 @@ def get_fequencies(dataset, key):
 
 def run(_):
     ds: DatasetDict = cast(DatasetDict, load_dataset(HUGGING_FACE_SOURCE_DATASET))
-    ds = ds.filter(valid_species)
-    ds = ds.map(extract_names)
+    ds = ds.filter(valid_species, num_proc=NUM_PROC)
     ds = ds.remove_columns(
         [
             "kingdom_key",
@@ -155,7 +172,7 @@ def run(_):
             "continent",
         ]
     )
-    ds = ds.map(extract_names)
+    ds = ds.map(extract_names_batched, batched=True, num_proc=NUM_PROC)
 
     genus = ds["data"]["genus"]
     uniq, counts = np.unique(genus, return_counts=True)
@@ -197,6 +214,8 @@ def run(_):
 
     hierarchy = extract_hierarchy(ds)
 
+    print("extracted hierarchy, creating dict")
+
     ds_train_validtest = ds["data"].train_test_split(test_size=0.2, seed=42)
     ds_validtest = ds_train_validtest["test"].train_test_split(test_size=0.5, seed=42)
     ds_dict = DatasetDict(
@@ -210,7 +229,11 @@ def run(_):
     species_freq = get_fequencies(ds_dict, "species")
     genus_freq = get_fequencies(ds_dict, "genus")
 
+    print("created dict, uploading ...")
+
     ds_dict.push_to_hub(HUGGING_FACE_PROCESSED_GENUS_SPECIES_DATASET, private=True)
+
+    print("created metadata and hierarchies, uploading ...")
 
     metadata = {
         "per_level": [
