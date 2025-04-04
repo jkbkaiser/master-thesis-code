@@ -123,11 +123,10 @@ class Dataset():
 
         self.train_transform = transforms.Compose([
             transforms.RandomRotation(30),
-            transforms.Resize(256),
-            transforms.RandomCrop(224, padding=2),
+            transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
             transforms.Lambda(lambda x: x / 255.0),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            transforms.RandomErasing(p=0.5, scale=(0.02, 0.1), ratio=(0.3, 3.3), value=0),
+            transforms.RandomErasing(p=0.7, scale=(0.02, 0.2), ratio=(0.3, 3.3), value=0),
         ])
 
         self.transform = transforms.Compose([

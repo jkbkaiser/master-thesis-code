@@ -1,12 +1,14 @@
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class ClassifierModule(nn.Module):
     def __init__(self, out_features, architecture):
         super().__init__()
         self.classifiers = nn.ModuleList(
-            [nn.Linear(out_features, nc) for nc in architecture]
+            [nn.Sequential(
+                nn.Dropout(0.3),
+                nn.Linear(out_features, nc)
+            ) for nc in architecture]
         )
 
     def forward(self, features):
@@ -23,7 +25,7 @@ class PLC(nn.Module):
         else:
             self.model = ClassifierModule(out_features, architecture)
 
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
     def forward(self, x):
         return self.model(x)
