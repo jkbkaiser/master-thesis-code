@@ -107,7 +107,11 @@ class Dataset():
 
         self.metadata = self._get_metadata(reload)
         self.labelcount_per_level = [int(v["count"]) for v in self.metadata["per_level"]]
-        self.id2label_per_level = [{int(k): v} for level in self.metadata["per_level"] for k, v in level["id2label"].items()]
+        self.id2label_per_level = [
+            {int(k): v for k, v in level["id2label"].items()}
+            for level in self.metadata["per_level"]
+        ]
+
         self.frequencies = self._get_frequencies()
 
         if self.type == DatasetType.GENUS_SPECIES:
