@@ -64,6 +64,7 @@ def parse_args():
         type=str,
         choices=["adam", "sgd"],
     )
+
     parser.add_argument(
         "-lr", "--learning-rate", default=1e-5, required=False, type=float
     )
