@@ -19,7 +19,7 @@ PRETRAINED_WEIGHTS_DIR = Path(os.getcwd()) / "pretrained_weights"
 PRETRAINED_T2T_VITT_T14 = PRETRAINED_WEIGHTS_DIR / "81.7_T2T_ViTt_14.pth.tar"
 PRETRAINED_VITAEv2 = PRETRAINED_WEIGHTS_DIR / "ViTAEv2-B.pth.tar"
 
-torch.set_float32_matmul_precision("medium")
+torch.set_float32_matmul_precision("high")
 
 
 BACKBONE_DICT = {
@@ -42,9 +42,9 @@ def create_model(model_hparams, ds):
 
     init, path_to_weights, out_features = BACKBONE_DICT[model_hparams["backbone_name"]]
     backbone = init(
-        drop_rate=0.1,
-        attn_drop_rate=0.1,
-        drop_path_rate=0.1,
+        drop_rate=0.0,
+        attn_drop_rate=0.0,
+        drop_path_rate=0.0,
     )
 
     load_for_transfer_learning(
@@ -126,6 +126,8 @@ class LightningGBIF(L.LightningModule):
         logits = self(imgs)
         loss = self.loss_fn(logits, genus_labels, species_labels)
         species_preds = self.pred_fn(logits)
+
+        # print(loss)
 
         genus_preds = torch.zeros_like(genus_labels)
         metrics = self.metric.process_train_batch(genus_preds, genus_labels, species_preds, species_labels)

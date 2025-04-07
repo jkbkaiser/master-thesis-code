@@ -7,11 +7,8 @@ import torch.optim as optim
 
 from src.experiments.gbif_baselines.models import HAC, MARG, MPLC, PLC
 from src.shared.datasets import Dataset, DatasetType, DatasetVersion
-from src.shared.torch.backbones import (
-    ViTAEv2_B,
-    load_for_transfer_learning,
-    t2t_vit_t_14,
-)
+from src.shared.torch.backbones import (ViTAEv2_B, load_for_transfer_learning,
+                                        t2t_vit_t_14)
 from src.shared.torch.metric import Metric
 
 PRETRAINED_WEIGHTS_DIR = Path(os.getcwd()) / "pretrained_weights"
@@ -36,9 +33,9 @@ def create_model(model_name, model_hparams, ds):
         # Load pretrained weights
         init, path_to_weights, out_features = BACKBONE_DICT[model_hparams["backbone_name"]]
         backbone = init(
-            drop_rate=0.2,
-            attn_drop_rate=0.1,
-            drop_path_rate=0.2,
+            # drop_rate=0.2,
+            # attn_drop_rate=0.1,
+            # drop_path_rate=0.2,
         )
         load_for_transfer_learning(
             backbone,
@@ -124,6 +121,7 @@ class LightningGBIF(L.LightningModule):
         imgs, genus_labels, species_labels = batch
         logits = self(imgs)
         loss = self.loss_fn(logits, genus_labels, species_labels)
+        # print(loss)
         genus_preds, species_preds = self.pred_fn(logits)
         metrics = self.metric.process_train_batch(genus_preds, genus_labels, species_preds, species_labels)
 

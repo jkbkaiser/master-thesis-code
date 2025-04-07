@@ -42,8 +42,12 @@ def run(args):
     optim_hparams = {
         "lr": args.learning_rate,
         "weight_decay": args.weight_decay,
-        "momentum": args.momentum
     }
+
+    if args.optimizer == "sgd":
+        optim_hparams.update({
+            "momentum": args.momentum
+        })
 
     mlf_logger.log_hyperparams(general_hparams)
     mlf_logger.log_hyperparams(model_hparams)
@@ -87,41 +91,6 @@ def run(args):
     trainer.fit(model, ds.train_dataloader, ds.valid_dataloader)
 
 
-    # model = create_model(model_hparams, args.dataset, prototypes)
-    #
-    # model.to(DEVICE)
-    #
-    # optimizer = optim.SGD(
-    #     model.parameters(),
-    #     lr=args.learning_rate,
-    #     momentum=args.momentum,
-    #     nesterov=True,
-    #     weight_decay=args.weight_decay,
-    # )
-    #
-    # for epoch in range(args.epochs):
-    #     avg_loss = 0
-    #
-    #     for batch in tqdm(ds.train_dataloader):
-    #         imgs, genus_labels, species_labels = batch
-    #
-    #         imgs = imgs.to(DEVICE)
-    #         species_labels = species_labels.to(DEVICE)
-    #
-    #         logits = model.forward(imgs)
-    #         loss = model.loss_fn(logits, genus_labels, species_labels)
-    #
-    #         optimizer.zero_grad()
-    #         loss.backward()
-    #         optimizer.step()
-    #
-    #         avg_loss += loss
-    #
-    #     print("epoch", epoch, "loss", avg_loss / len(ds.train_dataloader))
-    #
-    # print("F")
-
-
 def parse_args():
     parser = argparse.ArgumentParser(
         prog="Hyperbolic embeddings",
@@ -135,7 +104,7 @@ def parse_args():
         choices=[v.value for v in DatasetVersion],
     )
     parser.add_argument("--batch-size", default=16, required=False, type=int)
-    parser.add_argument('--learning-rate', default=0.1, type=float)
+    parser.add_argument('--learning-rate', default=0.0001, type=float)
     parser.add_argument('--num-epochs', default=25, type=int)
     parser.add_argument("--eval-every", default=2, required=False, type=int)
     parser.add_argument(
@@ -167,7 +136,9 @@ def parse_args():
         "--freeze-backbone", action="store_true", help="Freeze backbone during training"
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    return args
 
 
 if __name__ == "__main__":

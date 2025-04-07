@@ -6,7 +6,7 @@ class ClassifierModule(nn.Module):
         super().__init__()
         self.classifiers = nn.ModuleList(
             [nn.Sequential(
-                nn.Dropout(0.3),
+                # nn.Dropout(0.3),
                 nn.Linear(out_features, nc)
             ) for nc in architecture]
         )
@@ -25,7 +25,9 @@ class PLC(nn.Module):
         else:
             self.model = ClassifierModule(out_features, architecture)
 
-        self.criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+        self.criterion = nn.CrossEntropyLoss(
+            # label_smoothing=0.1
+        )
 
     def forward(self, x):
         return self.model(x)

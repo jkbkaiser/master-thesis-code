@@ -1,4 +1,5 @@
 import geoopt
+import torch
 import torch.nn as nn
 
 
@@ -14,10 +15,20 @@ class Uniform(nn.Module):
 
     def forward(self, x):
         out_feature_euc = self.model(x)
-        out_feature_hyp = self.ball.expmap0(out_feature_euc)
-        return -self.ball.dist(self.prototypes, out_feature_hyp[:, None, :])
+        # out_feature_hyp = self.ball.expmap0(out_feature_euc)
+        # print("F")
+        # print(self.prototypes.shape)
+        # print(out_feature_hyp.shape)
+        # return -self.ball.dist(self.prototypes, out_feature_hyp[:, None, :])
+
+        return -torch.cdist(out_feature_euc, self.prototypes)
+
+        # return out_feature_euc
+
 
     def pred_fn(self, logits):
+        # print("p", logits.shape)
+        # print(logits)
         return logits.argmax(dim=1)
 
     def loss_fn(self, logits, genus_labels, species_labels):

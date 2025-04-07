@@ -44,7 +44,9 @@ class Attention(nn.Module):
             .reshape(B, N, 3, self.num_heads, self.in_dim)
             .permute(2, 0, 3, 1, 4)
         )
+
         q, k, v = qkv[0], qkv[1], qkv[2]
+
 
         attn = (q * self.scale) @ k.transpose(-2, -1)
         attn = attn.softmax(dim=-1)
@@ -78,6 +80,7 @@ class Token_transformer(nn.Module):
         norm_layer=nn.LayerNorm,
     ):
         super().__init__()
+        self.dim = dim
         self.norm1 = norm_layer(dim)
         self.attn = Attention(
             dim,

@@ -66,7 +66,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        "-lr", "--learning-rate", default=1e-5, required=False, type=float
+        "-lr", "--learning-rate", default=1e-4, required=False, type=float
     )
     parser.add_argument(
         "--weight-decay", default=1e-2, required=False, type=float
@@ -148,7 +148,7 @@ def run(args):
         logger=mlf_logger,
         callbacks=[early_stop_callback, checkpoint_callback],
         profiler="simple",
-        enable_progress_bar=False,
+        enable_progress_bar=True,
     )
 
     logging.getLogger("lightning.pytorch").setLevel(logging.FATAL)

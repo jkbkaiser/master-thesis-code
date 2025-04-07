@@ -1,16 +1,22 @@
-import equinox as eqx
-import jax
-from jaxtyping import PRNGKeyArray
+import flax.nnx as nnx
+from jax import lax
 
 
-class Linear(eqx.Module):
-    weight: jax.Array
-    bias: jax.Array
-
-    def __init__(self, in_shape: int, out_shape: int, key: PRNGKeyArray):
-        wkey, bkey = jax.random.split(key, num=2)
-        self.weight = jax.random.uniform(wkey, (out_shape, in_shape))
-        self.bias = jax.random.uniform(bkey, (out_shape,))
+class Unfold(nnx.Module):
+    def __init__(self, kernel_size: tuple[int, int], padding: tuple[int, int], stride: tuple[int, int]):
+        self.kernel_size = kernel_size
+        self.padding = [
+            (padding[0], padding[0]),
+            (padding[1], padding[1]),
+        ]
+        self.stride = stride
 
     def __call__(self, x):
-        return self.weight @ x + self.bias
+        patches = lax.conv_general_dilated_patches(
+            lhs=x,
+            filter_shape=self.kernel_size,
+            window_strides=self.stride,
+            padding=self.padding,
+        )
+        flattened = patches.reshape(patches.shape[0], patches.shape[1], -1)
+        return flattened
