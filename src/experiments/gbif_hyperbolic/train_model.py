@@ -1,7 +1,6 @@
 import argparse
 import logging
 import os
-from pathlib import Path
 
 import lightning as L
 from dotenv import load_dotenv
@@ -14,6 +13,7 @@ from src.shared.datasets import Dataset, DatasetVersion
 load_dotenv()
 MLFLOW_SERVER = os.environ["MLFLOW_SERVER"]
 CHECKPOINT_DIR = os.environ["CHECKPOINT_DIR"]
+
 
 
 def run(args):
@@ -55,6 +55,7 @@ def run(args):
 
 
     model = LightningGBIF(
+        model_name=args.model,
         model_hparams=model_hparams,
         optimizer_name=args.optimizer,
         optimizer_hparams=optim_hparams,
@@ -96,6 +97,16 @@ def parse_args():
         prog="Hyperbolic embeddings",
         description="Training script for training a hyperbolic model using uniform embeddings",
     )
+
+    parser.add_argument(
+        "-m",
+        "--model",
+        default="hypersphere",
+        required=False,
+        type=str,
+        choices=["hypersphere"],
+    )
+
     parser.add_argument(
         "-d",
         "--dataset",
@@ -121,6 +132,14 @@ def parse_args():
         choices=["t2t_vit", "vitaev2"],
     )
     parser.add_argument(
+        "--prototypes",
+        default=128,
+        required=False,
+        type=int,
+        choices=[64, 128, 256, 512],
+    )
+
+    parser.add_argument(
         "--experiment-name", default="gbif_hyperbolic", required=False, type=str
     )
     parser.add_argument(
@@ -131,7 +150,6 @@ def parse_args():
         type=str,
         choices=["adam", "sgd"],
     )
-    parser.add_argument('--prototypes', default="./prototypes/prototypes-64-gbif_genus_species_10k.npy", type=Path)
     parser.add_argument(
         "--freeze-backbone", action="store_true", help="Freeze backbone during training"
     )

@@ -1,4 +1,3 @@
-import math
 import os
 from pathlib import Path
 
@@ -8,12 +7,12 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 
+from src.constants import DEVICE
+from src.experiments.gbif_hyperbolic.models.hypersphere import HyperSphere
 from src.shared.datasets import Dataset, DatasetType
 from src.shared.torch.backbones import (ViTAEv2_B, load_for_transfer_learning,
                                         t2t_vit_t_14)
 from src.shared.torch.metric import Metric
-
-from .models.uniform import Uniform
 
 PRETRAINED_WEIGHTS_DIR = Path(os.getcwd()) / "pretrained_weights"
 PRETRAINED_T2T_VITT_T14 = PRETRAINED_WEIGHTS_DIR / "81.7_T2T_ViTt_14.pth.tar"
@@ -21,23 +20,29 @@ PRETRAINED_VITAEv2 = PRETRAINED_WEIGHTS_DIR / "ViTAEv2-B.pth.tar"
 
 torch.set_float32_matmul_precision("high")
 
+MODEL_DICT = {
+    "hypersphere": HyperSphere,
+}
 
 BACKBONE_DICT = {
     "t2t_vit": (t2t_vit_t_14, PRETRAINED_T2T_VITT_T14, 384),
     "vitaev2": (ViTAEv2_B, PRETRAINED_VITAEv2, 1024),
 }
 
-def get_prototypes(prototype_path: Path):
-    curvature = 1
-    scale_factor = 0.95
+def get_prototypes(prototype, ds):
+    # curvature = 1
+    # scale_factor = 0.95
 
+    prototype_path = Path("./prototypes") / ds.version.value / f"prototypes-{prototype}-{ds.version.value}.npy"
     prototypes = torch.from_numpy(np.load(prototype_path)).float()
-    prototypes = F.normalize(prototypes, p=2, dim=1)
-    prototypes = prototypes.cuda() * scale_factor / math.sqrt(curvature)
+    prototypes = F.normalize(prototypes, p=2, dim=1).to(DEVICE)
+
+    # prototypes = prototypes.cuda() * scale_factor / math.sqrt(curvature)
+
     return prototypes
 
-def create_model(model_hparams, ds):
-    prototypes = get_prototypes(model_hparams["prototypes"])
+def create_model(model_name, model_hparams, ds):
+    prototypes = get_prototypes(model_hparams["prototypes"], ds)
     model_hparams["prototypes"] = prototypes
 
     init, path_to_weights, out_features = BACKBONE_DICT[model_hparams["backbone_name"]]
@@ -54,7 +59,8 @@ def create_model(model_hparams, ds):
         strict=False,
     )
 
-    model = Uniform(backbone, out_features, **model_hparams, ds=ds)
+    cls = MODEL_DICT[model_name]
+    model = cls(backbone, out_features, **model_hparams, ds=ds)
 
     print("Freezing backbone")
     if model_hparams["freeze_backbone"]:
@@ -79,6 +85,7 @@ def get_num_classes(ds: Dataset):
 class LightningGBIF(L.LightningModule):
     def __init__(
         self,
+        model_name,
         model_hparams,
         optimizer_name,
         optimizer_hparams,
@@ -88,7 +95,7 @@ class LightningGBIF(L.LightningModule):
         self.ds = ds
         self.optimizer_name = optimizer_name
         self.optimizer_hparams = optimizer_hparams
-        self.model = create_model(model_hparams, ds)
+        self.model = create_model(model_name, model_hparams, ds)
 
         self.pred_fn = self.model.pred_fn
         self.loss_fn = self.model.loss_fn

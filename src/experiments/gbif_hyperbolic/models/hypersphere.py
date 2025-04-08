@@ -1,13 +1,13 @@
 import geoopt
-import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
-class Uniform(nn.Module):
+class HyperSphere(nn.Module):
     def __init__(self, backbone, out_features, architecture, prototypes, **_):
         super().__init__()
         self.model = backbone
-        self.model.head = nn.Linear(out_features, 64)
+        self.model.head = nn.Linear(out_features, 128)
         self.ball = geoopt.PoincareBallExact(c=1)
 
         self.prototypes = prototypes
@@ -15,15 +15,14 @@ class Uniform(nn.Module):
 
     def forward(self, x):
         out_feature_euc = self.model(x)
+        out_feature_sphere = F.normalize(out_feature_euc, p=2, dim=1)
+
         # out_feature_hyp = self.ball.expmap0(out_feature_euc)
-        # print("F")
-        # print(self.prototypes.shape)
-        # print(out_feature_hyp.shape)
         # return -self.ball.dist(self.prototypes, out_feature_hyp[:, None, :])
-
-        return -torch.cdist(out_feature_euc, self.prototypes)
-
         # return out_feature_euc
+
+        return out_feature_sphere @ self.prototypes.T
+
 
 
     def pred_fn(self, logits):
