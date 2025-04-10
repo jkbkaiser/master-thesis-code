@@ -1,3 +1,4 @@
+import math
 import os
 from pathlib import Path
 
@@ -97,6 +98,10 @@ class LightningGBIF(L.LightningModule):
         self.optimizer_hparams = optimizer_hparams
         self.model = create_model(model_name, model_hparams, ds)
 
+        self.freeze_backbone = model_hparams["freeze_backbone"]
+        if not self.freeze_backbone:
+            self.freeze_epochs = model_hparams["freeze_epochs"]
+
         self.pred_fn = self.model.pred_fn
         self.loss_fn = self.model.loss_fn
 
@@ -124,7 +129,33 @@ class LightningGBIF(L.LightningModule):
 
         optimizer = optim_dict[self.optimizer_name](params, **self.optimizer_hparams)
 
-        return [optimizer]
+        total_steps = self.trainer.estimated_stepping_batches
+
+        warmup_steps = 500
+        warmup_lr_init = 1e-6
+        base_lr = self.optimizer_hparams["lr"]
+        min_lr = 1e-5
+
+        def lr_lambda(current_step):
+            if current_step < warmup_steps:
+                return (warmup_lr_init / base_lr) + (
+                    (1.0 - warmup_lr_init / base_lr) * (current_step / warmup_steps)
+                )
+            decay_steps = total_steps - warmup_steps
+            decay_step = current_step - warmup_steps
+            cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_step / decay_steps))
+            return (min_lr / base_lr) + (1 - min_lr / base_lr) * cosine_decay
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "step",
+                "frequency": 1,
+            },
+        }
 
     def training_step(self, batch):
         self.log("step", self.current_epoch)
@@ -134,15 +165,26 @@ class LightningGBIF(L.LightningModule):
         loss = self.loss_fn(logits, genus_labels, species_labels)
         species_preds = self.pred_fn(logits)
 
-        # print(loss)
-
         genus_preds = torch.zeros_like(genus_labels)
         metrics = self.metric.process_train_batch(genus_preds, genus_labels, species_preds, species_labels)
 
         self.log_epoch(loss, "train_loss")
         self.log_epoch(metrics, "train_")
 
+        lr = self.trainer.optimizers[0].param_groups[0]["lr"]
+
+        self.log_epoch(lr, "lr")
+
         return loss
+
+    def unfreeze_backbone(self):
+        for param in self.model.model.parameters():
+            param.requires_grad = True
+
+    def on_train_epoch_start(self):
+        if not self.freeze_backbone:
+            if self.current_epoch == self.freeze_epochs:
+                self.unfreeze_backbone()
 
     def validation_step(self, batch):
         imgs, genus_labels, species_labels = batch

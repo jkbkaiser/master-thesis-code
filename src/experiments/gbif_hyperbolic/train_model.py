@@ -27,6 +27,7 @@ def run(args):
     )
 
     general_hparams = {
+        "machine": args.machine,
         "batch_size": args.batch_size,
         "dataset": args.dataset.value,
         "epochs": args.num_epochs,
@@ -38,6 +39,11 @@ def run(args):
         "freeze_backbone": args.freeze_backbone,
         "prototypes": args.prototypes,
     }
+
+    if not args.freeze_backbone:
+        model_hparams.update({
+            "freeze_epochs": args.freeze_epochs
+        })
 
     optim_hparams = {
         "lr": args.learning_rate,
@@ -152,6 +158,17 @@ def parse_args():
     )
     parser.add_argument(
         "--freeze-backbone", action="store_true", help="Freeze backbone during training"
+    )
+
+    parser.add_argument(
+        "--freeze-epochs", help="Unfreeze backbone during training", type=int, default=10, required=False
+    )
+
+    parser.add_argument(
+        "--machine",
+        type=str,
+        default="local",
+        help="Machine identifier (e.g., 'local', 'server1', 'aws', etc.)"
     )
 
     args = parser.parse_args()
