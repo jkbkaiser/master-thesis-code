@@ -14,10 +14,11 @@ module load 2024
 source .env
 source .venv/bin/activate
 
-python -m src.experiments.gbif_hyperbolic.train_model
-    -d gbif_genus_species_100k \
-    -lr 1e-4 \
+python -m src.experiments.gbif_hyperbolic.train_model \
+    -d gbif_genus_species_10k \
+    --learning-rate 1e-4 \
     --weight-decay 0.02 \
+    --prototypes 512 \
     --num-epochs 25 \
     --batch-size 64 \
-    --no-freeze-backbone
+    --machine snellius
