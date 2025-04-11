@@ -171,6 +171,15 @@ def parse_args():
         help="Machine identifier (e.g., 'local', 'server1', 'aws', etc.)"
     )
 
+    parser.add_argument(
+        "--show-progress-bar",
+        dest="progress_bar",
+        action="store_true",
+        type=bool,
+        default=False,
+        help="Show progress bar"
+    )
+
     args = parser.parse_args()
 
     return args

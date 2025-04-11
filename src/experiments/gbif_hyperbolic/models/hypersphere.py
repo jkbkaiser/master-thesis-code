@@ -7,7 +7,7 @@ class HyperSphere(nn.Module):
     def __init__(self, backbone, out_features, architecture, prototypes, **_):
         super().__init__()
         self.model = backbone
-        self.model.head = nn.Linear(out_features, prototypes.shape[0])
+        self.model.head = nn.Linear(out_features, prototypes.shape[1])
         self.ball = geoopt.PoincareBallExact(c=1)
 
         self.prototypes = prototypes

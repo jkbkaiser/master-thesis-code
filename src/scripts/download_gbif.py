@@ -276,7 +276,7 @@ def run(args):
 
     print("Pushing to hub")
 
-    ds_dict.push_to_hub(HUGGING_FACE_DATASET, private=True)
+    # ds_dict.push_to_hub(HUGGING_FACE_DATASET, private=True)
 
 
 def parse_args():
