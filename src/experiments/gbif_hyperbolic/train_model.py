@@ -110,7 +110,7 @@ def parse_args():
         default="hypersphere",
         required=False,
         type=str,
-        choices=["hypersphere"],
+        choices=["hypersphere", "hyperbolic-uniform", "baseline"],
     )
 
     parser.add_argument(
@@ -161,21 +161,20 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--freeze-epochs", help="Unfreeze backbone during training", type=int, default=10, required=False
+        "--freeze-epochs", help="Unfreeze backbone during training", type=int, default=20, required=False
     )
 
     parser.add_argument(
         "--machine",
         type=str,
         default="local",
-        help="Machine identifier (e.g., 'local', 'server1', 'aws', etc.)"
+        help="Machine identifier (e.g., 'local', 'snellius', etc.)"
     )
 
     parser.add_argument(
         "--show-progress-bar",
         dest="progress_bar",
         action="store_true",
-        type=bool,
         default=False,
         help="Show progress bar"
     )

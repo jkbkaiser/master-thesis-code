@@ -63,13 +63,13 @@ def create_model(model_name, model_hparams, ds):
     cls = MODEL_DICT[model_name]
     model = cls(backbone, out_features, **model_hparams, ds=ds)
 
+    # if model_hparams["freeze_backbone"]:
     print("Freezing backbone")
-    if model_hparams["freeze_backbone"]:
-        for param in model.model.parameters():
-            param.requires_grad = False
+    for param in model.model.parameters():
+        param.requires_grad = False
 
-        for param in model.model.head.parameters():
-            param.requires_grad = True
+    for param in model.model.head.parameters():
+        param.requires_grad = True
 
     return model
 
@@ -131,18 +131,34 @@ class LightningGBIF(L.LightningModule):
 
         total_steps = self.trainer.estimated_stepping_batches
 
+        assert total_steps is not None
+        assert self.trainer.max_epochs is not None
+
+        epoch_steps = total_steps // int(self.trainer.max_epochs)
+
+        fixed_lr_epochs = self.freeze_epochs
+        step_offset = fixed_lr_epochs * epoch_steps
+
         warmup_steps = 500
         warmup_lr_init = 1e-6
         base_lr = self.optimizer_hparams["lr"]
-        min_lr = 1e-5
+        min_lr = 1e-4
 
         def lr_lambda(current_step):
-            if current_step < warmup_steps:
+            current_epoch = current_step // epoch_steps
+
+            if current_epoch < fixed_lr_epochs:
+                return 1e-3 / base_lr
+
+            adjusted_step = current_step - step_offset
+
+            if adjusted_step < warmup_steps:
                 return (warmup_lr_init / base_lr) + (
-                    (1.0 - warmup_lr_init / base_lr) * (current_step / warmup_steps)
+                    (1.0 - warmup_lr_init / base_lr) * (adjusted_step / warmup_steps)
                 )
+
             decay_steps = total_steps - warmup_steps
-            decay_step = current_step - warmup_steps
+            decay_step = adjusted_step - warmup_steps
             cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_step / decay_steps))
             return (min_lr / base_lr) + (1 - min_lr / base_lr) * cosine_decay
 
