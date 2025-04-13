@@ -254,27 +254,27 @@ def run(args):
 
     df = df.dropna(subset=DF_FIELDS)
 
-    print("Downloading images...")
-
-    store_csv(download_gbif_entries_parallel(df, args.num_entries))
-
-    print("Finished downloads, loading dataset")
-
-    ds = load_dataset(str(HF_DATA_DIR))["train"]
-
-    print("Filtering images")
-
-    ds = filter_existing_fields(ds)
-
-    print("Preprocessing data")
-
-    ds_dict = preprocess_dataset(ds)
-
-    print("Final data dictionary")
-
-    print(ds_dict)
-
-    print("Pushing to hub")
+    # print("Downloading images...")
+    #
+    # store_csv(download_gbif_entries_parallel(df, args.num_entries))
+    #
+    # print("Finished downloads, loading dataset")
+    #
+    # ds = load_dataset(str(HF_DATA_DIR))["train"]
+    #
+    # print("Filtering images")
+    #
+    # ds = filter_existing_fields(ds)
+    #
+    # print("Preprocessing data")
+    #
+    # ds_dict = preprocess_dataset(ds)
+    #
+    # print("Final data dictionary")
+    #
+    # print(ds_dict)
+    #
+    # print("Pushing to hub")
 
     # ds_dict.push_to_hub(HUGGING_FACE_DATASET, private=True)
 

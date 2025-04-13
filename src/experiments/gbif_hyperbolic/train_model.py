@@ -100,17 +100,17 @@ def run(args):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        prog="Hyperbolic embeddings",
-        description="Training script for training a hyperbolic model using uniform embeddings",
+        prog="Hyperbolic training",
+        description="Training script for training a hyperbolical and hyperspherical models with the gbif dataset",
     )
 
     parser.add_argument(
         "-m",
         "--model",
-        default="hypersphere",
+        default="hyperspherical",
         required=False,
         type=str,
-        choices=["hypersphere", "hyperbolic-uniform", "baseline"],
+        choices=["hyperspherical", "hyperbolic-uniform", "baseline"],
     )
 
     parser.add_argument(

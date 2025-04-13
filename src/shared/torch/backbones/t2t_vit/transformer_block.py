@@ -50,6 +50,7 @@ class Attention(nn.Module):
         proj_drop=0.0,
     ):
         super().__init__()
+
         self.num_heads = num_heads
         head_dim = dim // num_heads
 

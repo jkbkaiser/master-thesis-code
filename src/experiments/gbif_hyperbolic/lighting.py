@@ -9,7 +9,10 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 from src.constants import DEVICE
-from src.experiments.gbif_hyperbolic.models.hypersphere import HyperSphere
+from src.experiments.gbif_hyperbolic.models.baseline import Baseline
+from src.experiments.gbif_hyperbolic.models.hyperbolic_uniform import \
+    HyperbolicUniform
+from src.experiments.gbif_hyperbolic.models.hypersphere import Hyperspherical
 from src.shared.datasets import Dataset, DatasetType
 from src.shared.torch.backbones import (ViTAEv2_B, load_for_transfer_learning,
                                         t2t_vit_t_14)
@@ -22,7 +25,9 @@ PRETRAINED_VITAEv2 = PRETRAINED_WEIGHTS_DIR / "ViTAEv2-B.pth.tar"
 torch.set_float32_matmul_precision("high")
 
 MODEL_DICT = {
-    "hypersphere": HyperSphere,
+    "hyperspherical": Hyperspherical,
+    "hyperbolic-uniform": HyperbolicUniform,
+    "baseline": Baseline,
 }
 
 BACKBONE_DICT = {

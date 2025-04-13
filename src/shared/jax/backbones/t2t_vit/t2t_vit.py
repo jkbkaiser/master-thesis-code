@@ -1,133 +1,15 @@
-from typing import cast
+import os
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import torch
 from flax import nnx
 
+from src.shared.jax.backbones.t2t_vit.token_transformer import TokenTransformer
+from src.shared.jax.backbones.t2t_vit.transformer_block import TransformerBlock
 from src.shared.jax.modules import Unfold
-from src.shared.torch.backbones.t2t_vit.t2t_vit import t2t_vit_t_14
-
-
-class Attention(nnx.Module):
-    def __init__(
-        self,
-        in_features: int,
-        qkv_features: int,
-        out_features: int,
-        rngs: nnx.Rngs,
-        num_heads: int = 8,
-        attn_dropout: float = 0.0,
-        proj_dropout: float = 0.0,
-    ):
-        self.num_heads = num_heads
-        self.qkv_features = qkv_features
-        self.out_features = out_features
-
-        head_dim = in_features // num_heads
-        self.scale = head_dim**-0.5
-
-        self.qkv = nnx.Linear(in_features, qkv_features * 3, rngs=rngs)
-        self.attn_dropout = nnx.Dropout(attn_dropout)
-        self.proj = nnx.Linear(qkv_features, out_features, rngs=rngs)
-        self.proj_dropout = nnx.Dropout(proj_dropout)
-
-    def __call__(self, x):
-        B, N, _ = x.shape
-
-        qkv = self.qkv(x)
-        qkv = qkv.reshape(B, N, 3, self.num_heads, self.qkv_features)
-        qkv = qkv.transpose((2, 0, 3, 1, 4))
-
-        q, k, v = qkv[0], qkv[2], qkv[2]
-
-        attn = jax.nn.softmax(
-            (q * self.scale) @ k.transpose(0, 1, 3, 2)
-        )
-
-        x = (attn @ v).transpose(0, 2, 1, 3).reshape(B, N, self.qkv_features)
-        x = self.proj(x)
-        x = self.proj_dropout(x)
-
-        x = v.squeeze(1) + x
-
-        return x
-
-class MLP(nnx.Module):
-    def __init__(
-        self,
-        in_features: int,
-        hidden_features: int,
-        out_features: int,
-        act_layer,
-        drop: float,
-        rngs: nnx.Rngs,
-    ):
-        self.in_features = in_features
-        self.hidden_features = hidden_features
-        self.out_features = out_features
-        self.rngs = rngs
-        self.act_layer = act_layer
-        self.drop = drop
-
-    def setup(self):
-        self.fc1 = nnx.Linear(self.in_features, self.hidden_features, rngs=rngs)
-        self.act = self.act_layer
-        self.fc2 = nnx.Linear(self.hidden_features, self.out_features, rngs=rngs)
-        self.dropout = nnx.Dropout(self.drop)
-
-    def __call__(self, x):
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.dropout(x)
-        x = self.fc2(x)
-        x = self.dropout(x)
-        return x
-
-
-class TokenTransformer(nnx.Module):
-    def __init__(
-        self,
-        in_features: int,
-        token_features: int,
-        rngs: nnx.Rngs,
-        mlp_ratio: float = 1.0,
-        drop_path: float = 0.0,
-        drop: float = 0.0,
-    ):
-        self.in_features = in_features
-        self.token_features = token_features
-        self.rngs = rngs
-        self.drop_path = drop_path
-        self.drop = drop
-        self.mlp_ratio = mlp_ratio
-
-    def setup(self):
-        self.norm1 = nnx.LayerNorm(self.in_features, rngs=rngs)
-        self.attn = Attention(
-            self.in_features,
-            self.token_features,
-            self.token_features,
-            num_heads=1,
-            rngs=self.rngs,
-        )
-        self.dropout_path = nnx.Dropout(rate=self.drop_path) if self.drop_path > 0.0 else lambda x: x
-        self.norm2 = nnx.LayerNorm(self.token_features, rngs=rngs)
-        self.mlp = MLP(
-            in_features=self.token_features,
-            hidden_features=int(self.token_features * self.mlp_ratio),
-            out_features=self.token_features,
-            act_layer=nnx.gelu,
-            drop=self.drop,
-            rngs=rngs,
-        )
-
-    def __call__(self, x):
-        x = self.norm1(x)
-        x = self.attn(x)
-        x = self.norm2(x)
-        x = x + self.dropout_path(self.mlp(x))
-        return x
 
 
 class TokensToToken(nnx.Module):
@@ -135,11 +17,14 @@ class TokensToToken(nnx.Module):
         self.batch_size = batch_size
         self.embed_features = embed_features
 
-        self.img_size = 244
+        self.img_size = 224
         self.in_chans = 3
         self.token_features = 64
 
-    def setup(self):
+        self.num_patches = (self.img_size // (4 * 2 * 2)) * (
+            self.img_size // (4 * 2 * 2)
+        )
+
         self.soft_split1 = Unfold(
             kernel_size=(7, 7), stride=(4, 4), padding=(2, 2)
         )
@@ -175,34 +60,228 @@ class TokensToToken(nnx.Module):
         return x
 
 
+def get_sinusoidal_encoding(num_positions, embed_features):
+    w = np.arange(0, embed_features // 2)
+
+    def enc_single_position(pos):
+        angles = pos / np.pow(10000, 2 * w / embed_features)
+        sin = np.sin(angles)
+        cos = np.cos(angles)
+
+        # Interleave sin and cos: [sin1, cos1, sin2, cos2, ...]
+        interleaved = np.stack((sin, cos), axis=1).reshape(-1)
+        return interleaved
+
+    positions = np.arange(0, num_positions)
+    return np.array([enc_single_position(pos) for pos in positions])
+
+
 class T2TViT(nnx.Module):
-    def __init__(self):
+    def __init__(
+        self,
+        rngs: nnx.Rngs,
+        mlp_ratio: float = 4.0,
+        mlp_dropout: float = 0.0,
+        path_dropout: float = 0.0,
+        attn_dropout: float = 0.0,
+        num_heads: int = 6,
+        depth: int = 12,
+        batch_size: int = 16,
+    ):
         self.embed_features = 384
 
-    def setup(self):
         self.tokens_to_token = TokensToToken(
-            self.embed_features, batch_size=16, rngs=rngs
+            self.embed_features, batch_size=batch_size, rngs=rngs
         )
+
         self.cls_token = nnx.Param(jnp.zeros((1, 1, self.embed_features)))
+        self.pos_embed = get_sinusoidal_encoding(self.tokens_to_token.num_patches + 1, self.embed_features)
+
+
+        self.dropout = nnx.Dropout(mlp_dropout, rngs=rngs)
+
+        dpr = jnp.linspace(0, path_dropout, depth)
+
+        self.blocks = [
+            TransformerBlock(
+                self.embed_features, 
+                self.embed_features,
+                mlp_ratio=mlp_ratio,
+                mlp_dropout=mlp_dropout,
+                attn_dropout=attn_dropout,
+                path_dropout=dpr[i].item(),
+                num_heads=num_heads,
+                rngs=rngs,
+            )
+            for i in range(depth)
+        ]
+
+        self.norm = nnx.LayerNorm(self.embed_features, rngs=rngs)
 
     def __call__(self, x):
         B = x.shape[0]
-        tokens = self.tokens_to_token(x)
-        cls_token_array = cast(jnp.ndarray, self.cls_token)
-        cls_tokens = jnp.broadcast_to(cls_token_array, (B, 1, self.embed_features))
-        tokens = jnp.concatenate([cls_tokens, tokens], axis=1)
-        tokens = tokens + self.pos_embed
-        return t
+        embedding = self.tokens_to_token(x)
+        cls_tokens = jnp.broadcast_to(self.cls_token.value, (B, 1, self.embed_features))
+        embedding = jnp.concatenate([cls_tokens, embedding], axis=1)
+        embedding = embedding + self.pos_embed
+        embedding = self.dropout(embedding)
+
+        for block in self.blocks:
+            embedding = block(embedding)
+
+        embedding = self.norm(embedding)
+
+        cls_token = embedding[:, 0]
+        return cls_token
+
+
+
+def load_pretrained_weights(model: T2TViT, state_dict):
+    for i, (key, tensor) in enumerate(list(state_dict.items())):
+        np_tensor = tensor.cpu().numpy()
+
+        if key == "cls_token":
+            model.cls_token.value = np_tensor
+        elif key == "pos_embed":
+            model.pos_embed = np_tensor
+        elif key.startswith("tokens_to_token."):
+            parts = key.split(".")
+            param_name = parts[-1]
+
+            if parts[1] == "project":
+                module = getattr(model.tokens_to_token, "project")
+
+                if param_name == "weight":
+                    module.kernel.value = np_tensor.T
+                elif param_name == "bias":
+                    module.bias.value = np_tensor
+
+            elif parts[1].startswith("attention"):
+                attention_block = parts[1]
+                transformer_block = attention_block.replace("attention", "transformer")
+
+                submodule = parts[2]
+
+                block = getattr(model.tokens_to_token, transformer_block)
+                module = getattr(block, submodule)
+
+                # Assign weights, handling transpositions if necessary
+                if parts[3] == "qkv" or parts[3] == "proj" or parts[3].startswith("fc"):
+                    module = getattr(module, parts[3])
+
+
+                if param_name == "weight":
+                    if submodule.startswith("norm"):
+                        module.scale.value = np_tensor
+                    else:
+                        module.kernel.value = np_tensor.T
+                elif param_name == "bias":
+                    module.bias.value = np_tensor
+                else:
+                    print("did not cover t2t attn module", key, i)
+            else:
+                print("did not cover t2t module", key, i)
+        elif key.startswith("blocks."):
+            parts = key.split(".")
+            block_idx = int(parts[1])  # e.g., blocks.0 → 0
+            submodule = parts[2]       # e.g., norm1, attn, mlp
+
+            block = model.blocks[block_idx]
+
+            # Handle normalization layers
+            if submodule.startswith("norm"):
+                ln = getattr(block, submodule)
+                if parts[-1] == "weight":
+                    ln.scale.value = np_tensor
+                elif parts[-1] == "bias":
+                    ln.bias.value = np_tensor
+                else:
+                    print("Unhandled norm param:", key)
+
+            # Handle attention or mlp layers
+            elif submodule in ["attn", "mlp"]:
+                layer = getattr(block, submodule)
+
+                if parts[3] in ["qkv", "proj", "fc1", "fc2"]:
+                    sublayer = getattr(layer, parts[3])
+                    if parts[-1] == "weight":
+                        sublayer.kernel.value = np_tensor.T  # linear weights need transpose
+                    elif parts[-1] == "bias":
+                        sublayer.bias.value = np_tensor
+                    else:
+                        print("Unhandled attn/mlp param:", key)
+                else:
+                    print("Unknown sublayer:", key)
+        elif key.startswith("head."):
+            pass
+            # parts = key.split(".")
+            # param_name = parts[-1]
+            #
+            # module = model.head
+            #
+            # if param_name == "weight":
+            #     module.kernel.value = np_tensor.T
+            # elif param_name == "bias":
+            #     module.bias.value = np_tensor
+        elif key.startswith("norm."):
+            parts = key.split(".")
+            param_name = parts[-1]
+
+            module = model.norm
+
+            if param_name == "weight":
+                module.scale.value = np_tensor
+            elif param_name == "bias":
+                module.bias.value = np_tensor
+
+        else:
+            print("did not cover", key, i)
+
+
+
+def load_pretrained_t2t_vit():
+    rngs = nnx.Rngs(params=0, dropout=jax.random.key(1))
+
+    model = T2TViT(
+        depth=14,
+        mlp_ratio=3.0,
+        rngs=rngs,
+    )
+
+    PRETRAINED_WEIGHTS_DIR = Path(os.getcwd()) / "pretrained_weights"
+    PRETRAINED_T2T_VITT_T14 = PRETRAINED_WEIGHTS_DIR / "81.7_T2T_ViTt_14.pth.tar"
+
+    checkpoint = torch.load(PRETRAINED_T2T_VITT_T14, weights_only=True, map_location="cpu")
+
+    weights = checkpoint["state_dict_ema"]
+
+    load_pretrained_weights(model, weights)
+
+    return model
 
 
 if __name__ == "__main__":
-    t = torch.ones((16, 3, 224, 224))
-    model = t2t_vit_t_14()
-    out = model(t)
+    @nnx.jit
+    def test_step_jax(model: T2TViT, x: jax.Array):
+      def loss_fn(model: T2TViT):
+        logits = model(x)
+        return logits.mean()
 
-    print("---")
+      loss, grads = nnx.value_and_grad(loss_fn)(model)
+      return loss
 
-    rngs = nnx.Rngs(params=0, dropout=jax.random.key(1))
-    input = jnp.ones((16, 3, 224, 224))
-    model = T2TViT()
-    output = model(input)
+    model = load_pretrained_t2t_vit()
+
+    input = jnp.ones((16, 3, 224, 224), dtype=jnp.float32)
+
+    test_step_jax(model, input)
+
+    # input = torch.ones((16, 3, 224, 224)).to("cuda")
+    # model = T2T_ViT(
+    #     tokens_type="transformer",
+    #     embed_dim=384,
+    #     depth=8,
+    #     num_heads=6,
+    #     mlp_ratio=3.0
+    # ).to("cuda")
+

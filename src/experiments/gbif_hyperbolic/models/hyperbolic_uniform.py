@@ -1,9 +1,8 @@
 import geoopt
 import torch.nn as nn
-import torch.nn.functional as F
 
 
-class Hyperspherical(nn.Module):
+class HyperbolicUniform(nn.Module):
     def __init__(self, backbone, out_features, architecture, prototypes, **_):
         super().__init__()
         self.model = backbone
@@ -15,19 +14,10 @@ class Hyperspherical(nn.Module):
 
     def forward(self, x):
         out_feature_euc = self.model(x)
-        out_feature_sphere = F.normalize(out_feature_euc, p=2, dim=1)
-
-        # out_feature_hyp = self.ball.expmap0(out_feature_euc)
-        # return -self.ball.dist(self.prototypes, out_feature_hyp[:, None, :])
-        # return out_feature_euc
-
-        return out_feature_sphere @ self.prototypes.T
-
-
+        out_feature_hyp = self.ball.expmap0(out_feature_euc)
+        return -self.ball.dist(self.prototypes, out_feature_hyp[:, None, :])
 
     def pred_fn(self, logits):
-        # print("p", logits.shape)
-        # print(logits)
         return logits.argmax(dim=1)
 
     def loss_fn(self, logits, genus_labels, species_labels):

@@ -27,6 +27,7 @@ class Attention(nn.Module):
         super().__init__()
         self.num_heads = num_heads
         self.in_dim = in_dim
+        self.dim = dim
         head_dim = dim // num_heads
         self.scale = qk_scale or head_dim**-0.5
 

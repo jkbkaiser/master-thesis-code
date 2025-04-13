@@ -1,12 +1,13 @@
 import argparse
 import json
-from collections import Counter
+import random
+from collections import Counter, defaultdict
 from itertools import chain
 from pathlib import Path
 from typing import cast
 
 import numpy as np
-from datasets import DatasetDict, Features, Image, Value, load_dataset
+from datasets import Dataset, DatasetDict, Features, Image, Value, load_dataset
 from google.cloud import storage
 
 from src.constants import GOOGLE_BUCKET, GOOGLE_PROJECT, NUM_PROC
@@ -81,6 +82,7 @@ def upload_metadata(mappings, destination_blob_name):
     blob.upload_from_filename(source_file_name, if_generation_match=None)
     print(f"File {source_file_name} uploaded to {destination_blob_name}.")
 
+
 def upload_hierarchies(hierarchies, blob_name):
     d = (EXTRACTION_DIR / f"{VERSION.value}")
     if not d.exists():
@@ -146,6 +148,7 @@ def extract_hierarchy(ds):
 
     return [genus_to_species_mask]
 
+
 def get_fequencies(dataset, key):
     counts = Counter()
     for split in dataset.keys():
@@ -155,8 +158,40 @@ def get_fequencies(dataset, key):
     return dict(counts)
 
 
+def stratified_custom_split(dataset, label_col="species", seed=42):
+    random.seed(seed)
+    label2indices = defaultdict(list)
+
+    for idx, example in enumerate(dataset):
+        print(idx, example, label_col)
+        label2indices[example[label_col]].append(idx)
+
+    train_indices, valid_indices, test_indices = [], [], []
+
+    for label, indices in label2indices.items():
+        if len(indices) < 3:
+            continue
+
+        random.shuffle(indices)
+
+        n = len(indices)
+        n_train = int(n * 5 / 7)
+        n_valid = int(n * 1 / 7)
+
+        train_indices.extend(indices[:n_train])
+        valid_indices.extend(indices[n_train:n_train + n_valid])
+        test_indices.extend(indices[n_train + n_valid:])
+
+    ds_dict = DatasetDict({
+        "train": dataset.select(train_indices),
+        "valid": dataset.select(valid_indices),
+        "test": dataset.select(test_indices)
+    })
+
+    return ds_dict
+
 def run(_):
-    ds: DatasetDict = cast(DatasetDict, load_dataset(HUGGING_FACE_SOURCE_DATASET))
+    ds: DatasetDict = cast(DatasetDict, load_dataset(HUGGING_FACE_SOURCE_DATASET, num_proc=NUM_PROC))
     ds = ds.filter(valid_species, num_proc=NUM_PROC)
     ds = ds.remove_columns(
         [
@@ -216,15 +251,8 @@ def run(_):
 
     print("extracted hierarchy, creating dict")
 
-    ds_train_validtest = ds["data"].train_test_split(test_size=0.2, seed=42)
-    ds_validtest = ds_train_validtest["test"].train_test_split(test_size=0.5, seed=42)
-    ds_dict = DatasetDict(
-        {
-            "train": ds_train_validtest["train"],
-            "valid": ds_validtest["train"],
-            "test": ds_validtest["test"],
-        }
-    )
+    ds_dict = stratified_custom_split(ds["data"])
+    print(ds_dict)
 
     species_freq = get_fequencies(ds_dict, "species")
     genus_freq = get_fequencies(ds_dict, "genus")
@@ -252,7 +280,6 @@ def run(_):
 
     upload_metadata(metadata, f"{VERSION.value}/metadata.json")
     upload_hierarchies(hierarchies=hierarchy, blob_name=f"{VERSION.value}/hierarchy.npz")
-
 
 
 def parse_args():
