@@ -136,6 +136,29 @@ class T2TViT(nnx.Module):
 
 
 
+def print_model_structure(model, indent=0):
+    prefix = '  ' * indent
+    print(f"{prefix}{model.__class__.__name__}")
+
+    # Print parameters
+    for name, param in model.params.items():
+        print(f"{prefix}  ├── param: {name} | shape: {param.shape}")
+
+    # Print submodules
+    for name, submodule in model.items():
+        if isinstance(submodule, nnx.Module):
+            print(f"{prefix}  └── submodule: {name}")
+            print_model_structure(submodule, indent + 2)
+        elif isinstance(submodule, list) or isinstance(submodule, tuple):
+            print(f"{prefix}  └── sequence: {name}")
+            for i, sm in enumerate(submodule):
+                print(f"{prefix}    └── [{i}] {sm.__class__.__name__}")
+                if isinstance(sm, nnx.Module):
+                    print_model_structure(sm, indent + 3)
+        else:
+            print(f"{prefix}  └── attr: {name} ({type(submodule).__name__}")
+
+
 def load_pretrained_weights(model: T2TViT, state_dict):
     for i, (key, tensor) in enumerate(list(state_dict.items())):
         np_tensor = tensor.cpu().numpy()

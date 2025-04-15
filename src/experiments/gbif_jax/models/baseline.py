@@ -25,5 +25,5 @@ class Baseline(nnx.Module):
     def predict(self, logits):
         return logits.argmax(axis=1)
 
-    def loss_fn(self, logits, genus_labels, species_lables):
-        return self.criterion(logits, species_lables)
+    def loss(self, logits, genus_labels, species_lables):
+        return self.criterion(logits, species_lables).mean()

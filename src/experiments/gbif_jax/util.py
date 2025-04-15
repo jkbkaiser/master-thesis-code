@@ -1,4 +1,5 @@
-from flax import nnx
+import optax
+from flax import nnx, traverse_util
 
 from src.shared.jax.backbones.t2t_vit.t2t_vit import load_pretrained_t2t_vit
 
@@ -21,3 +22,14 @@ def load_model(model_name: str, rngs: nnx.Rngs):
     )
 
     return model
+
+
+def load_optimizer(model: Baseline, filter):
+
+    optimizer = nnx.Optimizer(
+      model,
+      tx=optax.adamw(1e-4),
+      wrt=filter,
+    )
+
+    return optimizer

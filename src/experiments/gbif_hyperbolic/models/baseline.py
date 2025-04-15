@@ -4,8 +4,12 @@ import torch.nn as nn
 class Baseline(nn.Module):
     def __init__(self, backbone, out_features, architecture, prototypes, **_):
         super().__init__()
-        self.model = backbone
-        self.model.head = nn.Linear(out_features, architecture[0])
+
+        if backbone is not None:
+            self.model = backbone
+            self.model.head = nn.Linear(out_features, architecture)
+        else:
+            self.model = nn.Linear(out_features, architecture)
 
         self.criterion = nn.CrossEntropyLoss()
 

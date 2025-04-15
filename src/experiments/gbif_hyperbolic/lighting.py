@@ -13,7 +13,7 @@ from src.experiments.gbif_hyperbolic.models.baseline import Baseline
 from src.experiments.gbif_hyperbolic.models.hyperbolic_uniform import \
     HyperbolicUniform
 from src.experiments.gbif_hyperbolic.models.hypersphere import Hyperspherical
-from src.shared.datasets import Dataset, DatasetType
+from src.shared.datasets import Dataset, DatasetType, DatasetVersion
 from src.shared.torch.backbones import (ViTAEv2_B, load_for_transfer_learning,
                                         t2t_vit_t_14)
 from src.shared.torch.metric import Metric
@@ -51,30 +51,47 @@ def create_model(model_name, model_hparams, ds):
     prototypes = get_prototypes(model_hparams["prototypes"], ds)
     model_hparams["prototypes"] = prototypes
 
-    init, path_to_weights, out_features = BACKBONE_DICT[model_hparams["backbone_name"]]
-    backbone = init(
-        drop_rate=0.0,
-        attn_drop_rate=0.0,
-        drop_path_rate=0.0,
-    )
+    if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS, DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS]:
+        out_features = 384
+        backbone = None
+    else:
+        init, path_to_weights, out_features = BACKBONE_DICT[model_hparams["backbone_name"]]
+        backbone = init(
+            drop_rate=0.0,
+            attn_drop_rate=0.0,
+            drop_path_rate=0.0,
+        )
 
-    load_for_transfer_learning(
-        backbone,
-        path_to_weights,
-        use_ema=True,
-        strict=False,
-    )
+        load_for_transfer_learning(
+            backbone,
+            path_to_weights,
+            use_ema=True,
+            strict=False,
+        )
 
     cls = MODEL_DICT[model_name]
     model = cls(backbone, out_features, **model_hparams, ds=ds)
 
-    # if model_hparams["freeze_backbone"]:
-    print("Freezing backbone")
-    for param in model.model.parameters():
-        param.requires_grad = False
+    if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS, DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS]:
+        pass
+    else:
 
-    for param in model.model.head.parameters():
-        param.requires_grad = True
+        if model_hparams["freeze_backbone"]:
+            print("Freezing backbone")
+            for param in model.model.parameters():
+                param.requires_grad = False
+
+            for param in model.model.head.parameters():
+                param.requires_grad = True
+
+
+    # # if model_hparams["freeze_backbone"]:
+    # print("Freezing backbone")
+    # for param in model.model.parameters():
+    #     param.requires_grad = False
+    #
+    # for param in model.model.head.parameters():
+    #     param.requires_grad = True
 
     return model
 
@@ -103,9 +120,9 @@ class LightningGBIF(L.LightningModule):
         self.optimizer_hparams = optimizer_hparams
         self.model = create_model(model_name, model_hparams, ds)
 
-        self.freeze_backbone = model_hparams["freeze_backbone"]
-        if not self.freeze_backbone:
-            self.freeze_epochs = model_hparams["freeze_epochs"]
+        # self.freeze_backbone = model_hparams["freeze_backbone"]
+        # if not self.freeze_backbone:
+        #     self.freeze_epochs = model_hparams["freeze_epochs"]
 
         self.pred_fn = self.model.pred_fn
         self.loss_fn = self.model.loss_fn
@@ -125,6 +142,17 @@ class LightningGBIF(L.LightningModule):
         return self.model(x)
 
     def configure_optimizers(self):
+        # params = filter(lambda p: p.requires_grad, self.model.parameters())
+        #
+        # optim_dict = {
+        #     "adam": optim.AdamW,
+        #     "sgd": optim.SGD,
+        # }
+        #
+        # optimizer = optim_dict[self.optimizer_name](params, **self.optimizer_hparams)
+        #
+        # return [optimizer]
+
         params = filter(lambda p: p.requires_grad, self.model.parameters())
 
         optim_dict = {
@@ -136,13 +164,13 @@ class LightningGBIF(L.LightningModule):
 
         total_steps = self.trainer.estimated_stepping_batches
 
-        assert total_steps is not None
-        assert self.trainer.max_epochs is not None
+        # assert total_steps is not None
+        # assert self.trainer.max_epochs is not None
 
-        epoch_steps = total_steps // int(self.trainer.max_epochs)
+        # epoch_steps = total_steps // int(self.trainer.max_epochs)
 
-        fixed_lr_epochs = self.freeze_epochs
-        step_offset = fixed_lr_epochs * epoch_steps
+        # fixed_lr_epochs = self.freeze_epochs
+        # step_offset = fixed_lr_epochs * epoch_steps
 
         warmup_steps = 500
         warmup_lr_init = 1e-6
@@ -150,12 +178,13 @@ class LightningGBIF(L.LightningModule):
         min_lr = 1e-4
 
         def lr_lambda(current_step):
-            current_epoch = current_step // epoch_steps
+            # current_epoch = current_step // epoch_steps
 
-            if current_epoch < fixed_lr_epochs:
-                return 1e-3 / base_lr
+            # if current_epoch < fixed_lr_epochs:
+            #     return 1e-3 / base_lr
 
-            adjusted_step = current_step - step_offset
+            # adjusted_step = current_step - step_offset
+            adjusted_step = current_step
 
             if adjusted_step < warmup_steps:
                 return (warmup_lr_init / base_lr) + (
@@ -184,8 +213,8 @@ class LightningGBIF(L.LightningModule):
         imgs, genus_labels, species_labels = batch
         logits = self(imgs)
         loss = self.loss_fn(logits, genus_labels, species_labels)
-        species_preds = self.pred_fn(logits)
 
+        species_preds = self.pred_fn(logits)
         genus_preds = torch.zeros_like(genus_labels)
         metrics = self.metric.process_train_batch(genus_preds, genus_labels, species_preds, species_labels)
 
@@ -198,20 +227,20 @@ class LightningGBIF(L.LightningModule):
 
         return loss
 
-    def unfreeze_backbone(self):
-        for param in self.model.model.parameters():
-            param.requires_grad = True
-
-    def on_train_epoch_start(self):
-        if not self.freeze_backbone:
-            if self.current_epoch == self.freeze_epochs:
-                self.unfreeze_backbone()
+    # def unfreeze_backbone(self):
+    #     for param in self.model.model.parameters():
+    #         param.requires_grad = True
+    #
+    # def on_train_epoch_start(self):
+    #     if not self.freeze_backbone:
+    #         if self.current_epoch == self.freeze_epochs:
+    #             self.unfreeze_backbone()
 
     def validation_step(self, batch):
         imgs, genus_labels, species_labels = batch
         logits = self(imgs)
-        species_preds = self.pred_fn(logits)
 
+        species_preds = self.pred_fn(logits)
         genus_preds = torch.zeros_like(genus_labels)
         metrics = self.metric.process_valid_batch(genus_preds, genus_labels, species_preds, species_labels)
 

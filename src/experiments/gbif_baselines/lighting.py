@@ -62,6 +62,7 @@ def create_model(model_name, model_hparams, ds):
 
     return model
 
+
 def get_num_classes(ds: Dataset):
     if ds.type == DatasetType.GENUS_SPECIES:
         return ds.labelcount_per_level
@@ -70,6 +71,7 @@ def get_num_classes(ds: Dataset):
         split = ds.metadata["per_level"][0]["split"]
         return split, total - split
     raise Exception("could not retrieve num classes")
+
 
 class LightningGBIF(L.LightningModule):
     def __init__(
@@ -121,7 +123,7 @@ class LightningGBIF(L.LightningModule):
         imgs, genus_labels, species_labels = batch
         logits = self(imgs)
         loss = self.loss_fn(logits, genus_labels, species_labels)
-        # print(loss)
+
         genus_preds, species_preds = self.pred_fn(logits)
         metrics = self.metric.process_train_batch(genus_preds, genus_labels, species_preds, species_labels)
 

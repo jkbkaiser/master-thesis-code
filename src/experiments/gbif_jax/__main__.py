@@ -3,9 +3,9 @@ import argparse
 import jax
 from flax import nnx
 
-from src.experiments.gbif_jax.model import MODEL_DICT, load_model
-from src.experiments.gbif_jax.optimizer import load_optimizer
-from src.experiments.gbif_jax.train_loop import train_model
+from src.experiments.gbif_jax.trainer import Trainer
+from src.experiments.gbif_jax.util import (MODEL_DICT, load_model,
+                                           load_optimizer)
 from src.shared.datasets import Dataset, DatasetVersion
 
 
@@ -61,15 +61,24 @@ def run(args):
     )
 
     ds = Dataset(args.dataset)
-    ds.load(batch_size=args.batch_size, use_torch=True)
+    ds.load(batch_size=args.batch_size, use_torch=False)
 
     model = load_model(args.model, rngs=rngs)
-    optimizer = load_optimizer()
+    # param_filter = nnx.All(nnx.Param, nnx.PathContains('head'))
+    param_filter = None
 
-    train_model(
-        model,
-        optimizer,
-        10,
+    optimizer = load_optimizer(model, param_filter)
+
+    trainer = Trainer(
+        model=model,
+        param_filter=param_filter,
+        optimizer=optimizer,
+    )
+
+    trainer.train(
+        train_dataloader=ds.train_dataloader,
+        valid_dataloader=ds.valid_dataloader,
+        num_epochs=5,
     )
 
 

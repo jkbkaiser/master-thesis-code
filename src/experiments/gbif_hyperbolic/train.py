@@ -28,6 +28,7 @@ def run(args):
 
     general_hparams = {
         "machine": args.machine,
+        "model_name": args.model,
         "batch_size": args.batch_size,
         "dataset": args.dataset.value,
         "epochs": args.num_epochs,
@@ -90,7 +91,6 @@ def run(args):
         enable_progress_bar=False,
     )
 
-
     logging.getLogger("lightning.pytorch").setLevel(logging.FATAL)
 
     print(f"Training for {args.num_epochs} epochs")
@@ -105,6 +105,9 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--experiment-name", default="gbif_hyperbolic", required=False, type=str
+    )
+    parser.add_argument(
         "-m",
         "--model",
         default="hyperspherical",
@@ -112,7 +115,13 @@ def parse_args():
         type=str,
         choices=["hyperspherical", "hyperbolic-uniform", "baseline"],
     )
-
+    parser.add_argument(
+        "--backbone",
+        default="t2t_vit",
+        required=False,
+        type=str,
+        choices=["t2t_vit", "vitaev2"],
+    )
     parser.add_argument(
         "-d",
         "--dataset",
@@ -131,27 +140,16 @@ def parse_args():
         "--momentum", default=0.9, required=False, type=float
     )
     parser.add_argument(
-        "--backbone",
-        default="t2t_vit",
-        required=False,
-        type=str,
-        choices=["t2t_vit", "vitaev2"],
-    )
-    parser.add_argument(
         "--prototypes",
-        default=128,
+        default=64,
         required=False,
         type=int,
         choices=[64, 128, 256, 512],
     )
-
-    parser.add_argument(
-        "--experiment-name", default="gbif_hyperbolic", required=False, type=str
-    )
     parser.add_argument(
         "-o",
         "--optimizer",
-        default="sgd",
+        default="adam",
         required=False,
         type=str,
         choices=["adam", "sgd"],
@@ -159,18 +157,15 @@ def parse_args():
     parser.add_argument(
         "--freeze-backbone", action="store_true", help="Freeze backbone during training"
     )
-
     parser.add_argument(
         "--freeze-epochs", help="Unfreeze backbone during training", type=int, default=20, required=False
     )
-
     parser.add_argument(
         "--machine",
         type=str,
         default="local",
         help="Machine identifier (e.g., 'local', 'snellius', etc.)"
     )
-
     parser.add_argument(
         "--show-progress-bar",
         dest="progress_bar",
