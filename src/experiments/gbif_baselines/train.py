@@ -82,7 +82,7 @@ def parse_args():
     parser.add_argument("--batch-size", default=16, required=False, type=int)
     parser.add_argument("--eval-every", default=2, required=False, type=int)
     parser.add_argument("--seed", default=42, required=False, type=int)
-    parser.add_argument("--reload", default=False, required=False, type=bool)
+    parser.add_argument("--reload", action="store_true", default=False, required=False)
 
     return parser.parse_args()
 
