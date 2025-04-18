@@ -15,7 +15,6 @@ MLFLOW_SERVER = os.environ["MLFLOW_SERVER"]
 CHECKPOINT_DIR = os.environ["CHECKPOINT_DIR"]
 
 
-
 def run(args):
     ds = Dataset(args.dataset)
     ds.load(batch_size=args.batch_size, use_torch=True)
@@ -47,7 +46,8 @@ def run(args):
         })
 
     optim_hparams = {
-        "lr": args.learning_rate,
+        "learning_rate": args.learning_rate,
+        "backbone_learning": args.backbone_learning_rate,
         "weight_decay": args.weight_decay,
     }
 
@@ -130,7 +130,8 @@ def parse_args():
         choices=[v.value for v in DatasetVersion],
     )
     parser.add_argument("--batch-size", default=16, required=False, type=int)
-    parser.add_argument('--learning-rate', default=0.0001, type=float)
+    parser.add_argument('--learning-rate', default=0.05, type=float)
+    parser.add_argument('--backbone-learning-rate', default=0.0001, type=float)
     parser.add_argument('--num-epochs', default=25, type=int)
     parser.add_argument("--eval-every", default=2, required=False, type=int)
     parser.add_argument(
@@ -158,7 +159,7 @@ def parse_args():
         "--freeze-backbone", action="store_true", help="Freeze backbone during training"
     )
     parser.add_argument(
-        "--freeze-epochs", help="Unfreeze backbone during training", type=int, default=20, required=False
+        "--freeze-epochs", help="Unfreeze backbone during training", type=int, default=10, required=False
     )
     parser.add_argument(
         "--machine",

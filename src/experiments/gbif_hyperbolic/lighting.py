@@ -75,25 +75,15 @@ def create_model(model_name, model_hparams, ds):
     if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS, DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS]:
         pass
     else:
+        print("Freezing backbone")
+        for param in model.model.parameters():
+            param.requires_grad = False
 
-        if model_hparams["freeze_backbone"]:
-            print("Freezing backbone")
-            for param in model.model.parameters():
-                param.requires_grad = False
-
-            for param in model.model.head.parameters():
-                param.requires_grad = True
-
-
-    # # if model_hparams["freeze_backbone"]:
-    # print("Freezing backbone")
-    # for param in model.model.parameters():
-    #     param.requires_grad = False
-    #
-    # for param in model.model.head.parameters():
-    #     param.requires_grad = True
+        for param in model.model.head.parameters():
+            param.requires_grad = True
 
     return model
+
 
 def get_num_classes(ds: Dataset):
     if ds.type == DatasetType.GENUS_SPECIES:
@@ -120,9 +110,8 @@ class LightningGBIF(L.LightningModule):
         self.optimizer_hparams = optimizer_hparams
         self.model = create_model(model_name, model_hparams, ds)
 
-        # self.freeze_backbone = model_hparams["freeze_backbone"]
-        # if not self.freeze_backbone:
-        #     self.freeze_epochs = model_hparams["freeze_epochs"]
+        self.freeze_backbone = model_hparams["freeze_backbone"]
+        self.freeze_epochs = model_hparams["freeze_epochs"]
 
         self.pred_fn = self.model.pred_fn
         self.loss_fn = self.model.loss_fn
@@ -142,61 +131,88 @@ class LightningGBIF(L.LightningModule):
         return self.model(x)
 
     def configure_optimizers(self):
-        # params = filter(lambda p: p.requires_grad, self.model.parameters())
-        #
-        # optim_dict = {
-        #     "adam": optim.AdamW,
-        #     "sgd": optim.SGD,
-        # }
-        #
-        # optimizer = optim_dict[self.optimizer_name](params, **self.optimizer_hparams)
-        #
-        # return [optimizer]
-
-        params = filter(lambda p: p.requires_grad, self.model.parameters())
-
-        optim_dict = {
-            "adam": optim.AdamW,
-            "sgd": optim.SGD,
-        }
-
-        optimizer = optim_dict[self.optimizer_name](params, **self.optimizer_hparams)
-
         total_steps = self.trainer.estimated_stepping_batches
-
-        # assert total_steps is not None
-        # assert self.trainer.max_epochs is not None
-
-        # epoch_steps = total_steps // int(self.trainer.max_epochs)
-
-        # fixed_lr_epochs = self.freeze_epochs
-        # step_offset = fixed_lr_epochs * epoch_steps
-
+        freeze_steps = self.trainer.estimated_stepping_batches * self.freeze_epochs // self.trainer.max_epochs
         warmup_steps = 500
+
+        start_lr = self.optimizer_hparams["learning_rate"]
+        backbone_lr = self.optimizer_hparams["backbone_learning_rate"]
         warmup_lr_init = 1e-6
-        base_lr = self.optimizer_hparams["lr"]
-        min_lr = 1e-4
+        min_lr = 1e-5
 
-        def lr_lambda(current_step):
-            # current_epoch = current_step // epoch_steps
+        # Separate params
+        head_params = []
+        backbone_params = []
 
-            # if current_epoch < fixed_lr_epochs:
-            #     return 1e-3 / base_lr
+        for name, param in self.model.named_parameters():
+            if "pos_embed" in name:
+                continue  # always frozen
+            if not param.requires_grad:
+                continue
+            if "head" in name:
+                head_params.append(param)
+            else:
+                backbone_params.append(param)
 
-            # adjusted_step = current_step - step_offset
-            adjusted_step = current_step
 
-            if adjusted_step < warmup_steps:
-                return (warmup_lr_init / base_lr) + (
-                    (1.0 - warmup_lr_init / base_lr) * (adjusted_step / warmup_steps)
-                )
+        if self.freeze_backbone:
+            optimizer = torch.optim.AdamW(head_params, lr=start_lr, **{
+                k: v for k, v in self.optimizer_hparams.items()
+                if k not in ["learning_rate", "backbone_learning_rate"]
+            })
 
-            decay_steps = total_steps - warmup_steps
-            decay_step = adjusted_step - warmup_steps
-            cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_step / decay_steps))
-            return (min_lr / base_lr) + (1 - min_lr / base_lr) * cosine_decay
+            def lr_lambda(step):
+                if step < warmup_steps:
+                    return (warmup_lr_init / start_lr) + (1.0 - warmup_lr_init / start_lr) * (step / warmup_steps)
+                decay_steps = total_steps - warmup_steps
+                decay_step = step - warmup_steps
+                cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_step / decay_steps))
+                return (min_lr / start_lr) + (1 - min_lr / start_lr) * cosine_decay
 
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+            scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+
+        else:
+            optimizer = torch.optim.AdamW([
+                {"params": head_params, "lr": start_lr},
+                {"params": backbone_params, "lr": backbone_lr},
+            ], **{k: v for k, v in self.optimizer_hparams.items() if k != "learning_rate" and k != "backbone_learning_rate"})
+
+            def lr_lambda_builder(base_lr, phase_steps, warmup_steps):
+                def lr_lambda(step):
+                    if step < warmup_steps:
+                        return (warmup_lr_init / base_lr) + (1.0 - warmup_lr_init / base_lr) * (step / warmup_steps)
+                    decay_steps = phase_steps - warmup_steps
+                    decay_step = step - warmup_steps
+                    cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_step / decay_steps))
+                    return (min_lr / base_lr) + (1 - min_lr / base_lr) * cosine_decay
+                return lr_lambda
+
+            def global_lr_lambda(step):
+                if step < freeze_steps:
+                    return [
+                        lr_lambda_builder(start_lr, freeze_steps, warmup_steps)(step),
+                        0.0  # freeze backbone
+                    ]
+                adjusted_step = step - freeze_steps
+                finetune_steps = total_steps - freeze_steps
+                return [
+                    lr_lambda_builder(start_lr, finetune_steps, warmup_steps)(adjusted_step),
+                    lr_lambda_builder(backbone_lr, finetune_steps, warmup_steps)(adjusted_step)
+                ]
+
+            class TwoPhaseLR(torch.optim.lr_scheduler.LambdaLR):
+                def __init__(self, optimizer, lr_lambda_fn):
+                    self.lr_lambda_fn = lr_lambda_fn
+                    super().__init__(optimizer, lr_lambda=lambda step: 1.0)
+
+                def get_lr(self):
+                    lambdas = self.lr_lambda_fn(self.last_epoch)
+                    return [
+                        group['initial_lr'] * lambdas[i]
+                        for i, group in enumerate(self.optimizer.param_groups)
+                    ]
+
+            scheduler = TwoPhaseLR(optimizer, lr_lambda_fn=global_lr_lambda)
 
         return {
             "optimizer": optimizer,
@@ -206,6 +222,64 @@ class LightningGBIF(L.LightningModule):
                 "frequency": 1,
             },
         }
+
+    # def configure_optimizers(self):
+    #     params = filter(lambda p: p.requires_grad, self.model.parameters())
+    #
+    #     optim_dict = {
+    #         "adam": optim.AdamW,
+    #         "sgd": optim.SGD,
+    #     }
+    #
+    #     optimizer = optim_dict[self.optimizer_name](params, **self.optimizer_hparams)
+    #
+    #     total_steps = self.trainer.estimated_stepping_batches
+    #
+    #     # assert total_steps is not None
+    #     # assert self.trainer.max_epochs is not None
+    #
+    #     # epoch_steps = total_steps // int(self.trainer.max_epochs)
+    #
+    #     # step_offset = fixed_lr_epochs * epoch_steps
+    #
+    #     self.freeze_epochs
+    #
+    #     start_lr = self.optimizer_hparams["learning_rate"]
+    #     bacekbone_lr = self.optimizer_hparams["backbone_learning_rate"]
+    #
+    #     warmup_steps = 500
+    #     warmup_lr_init = 1e-6
+    #     min_lr = 1e-4
+    #
+    #     def lr_lambda(current_step):
+    #         # current_epoch = current_step // epoch_steps
+    #
+    #         # if current_epoch < fixed_lr_epochs:
+    #         #     return 1e-3 / base_lr
+    #
+    #         # adjusted_step = current_step - step_offset
+    #         adjusted_step = current_step
+    #
+    #         if adjusted_step < warmup_steps:
+    #             return (warmup_lr_init / base_lr) + (
+    #                 (1.0 - warmup_lr_init / base_lr) * (adjusted_step / warmup_steps)
+    #             )
+    #
+    #         decay_steps = total_steps - warmup_steps
+    #         decay_step = adjusted_step - warmup_steps
+    #         cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_step / decay_steps))
+    #         return (min_lr / base_lr) + (1 - min_lr / base_lr) * cosine_decay
+    #
+    #     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+    #
+    #     return {
+    #         "optimizer": optimizer,
+    #         "lr_scheduler": {
+    #             "scheduler": scheduler,
+    #             "interval": "step",
+    #             "frequency": 1,
+    #         },
+    #     }
 
     def training_step(self, batch):
         self.log("step", self.current_epoch)
@@ -227,14 +301,17 @@ class LightningGBIF(L.LightningModule):
 
         return loss
 
-    # def unfreeze_backbone(self):
-    #     for param in self.model.model.parameters():
-    #         param.requires_grad = True
-    #
-    # def on_train_epoch_start(self):
-    #     if not self.freeze_backbone:
-    #         if self.current_epoch == self.freeze_epochs:
-    #             self.unfreeze_backbone()
+    def unfreeze_backbone(self):
+        for name, param in self.model.model.named_parameters():
+            if "pos_embed" not in name:
+                param.requires_grad = False
+            else:
+                param.requires_grad = True
+
+    def on_train_epoch_start(self):
+        if not self.freeze_backbone:
+            if self.current_epoch == self.freeze_epochs:
+                self.unfreeze_backbone()
 
     def validation_step(self, batch):
         imgs, genus_labels, species_labels = batch
