@@ -20,7 +20,7 @@ class Mlp(nn.Module):
         return x
 
 
-class HyperbolicUniform(nn.Module):
+class HyperbolicLearned(nn.Module):
     def __init__(self, backbone, out_features, architecture, prototypes, **_):
         super().__init__()
 
@@ -33,7 +33,7 @@ class HyperbolicUniform(nn.Module):
         c = 3
 
         self.ball = geoopt.PoincareBallExact(c=c)
-        self.prototypes = (prototypes * 0.95) / c
+        self.prototypes = nn.Parameter((prototypes * 0.95) / c)
         self.criterion = nn.CrossEntropyLoss()
 
     def forward(self, x):

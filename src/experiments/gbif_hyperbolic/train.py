@@ -47,7 +47,7 @@ def run(args):
 
     optim_hparams = {
         "learning_rate": args.learning_rate,
-        "backbone_learning": args.backbone_learning_rate,
+        "backbone_learning_rate": args.backbone_learning_rate,
         "weight_decay": args.weight_decay,
     }
 
@@ -113,7 +113,7 @@ def parse_args():
         default="hyperspherical",
         required=False,
         type=str,
-        choices=["hyperspherical", "hyperbolic-uniform", "baseline"],
+        choices=["hyperspherical", "hyperbolic-uniform", "baseline", "hyperbolic-learned"],
     )
     parser.add_argument(
         "--backbone",

@@ -23,7 +23,7 @@ class Hyperspherical(nn.Module):
 
         if backbone is not None:
             self.model = backbone
-            self.model.head = nn.Linear(out_features, prototypes.shape[1])
+            self.model.head = Mlp(out_features, 512, prototypes.shape[1])
         else:
             self.model = Mlp(out_features, 512, prototypes.shape[1])
 

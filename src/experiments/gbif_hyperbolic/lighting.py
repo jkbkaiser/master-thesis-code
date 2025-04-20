@@ -1,4 +1,3 @@
-import math
 import os
 from pathlib import Path
 
@@ -6,10 +5,11 @@ import lightning as L
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.optim as optim
+from torch.optim.lr_scheduler import LambdaLR
 
 from src.constants import DEVICE
 from src.experiments.gbif_hyperbolic.models.baseline import Baseline
+from src.experiments.gbif_hyperbolic.models.hyperbolic_learned import HyperbolicLearned
 from src.experiments.gbif_hyperbolic.models.hyperbolic_uniform import \
     HyperbolicUniform
 from src.experiments.gbif_hyperbolic.models.hypersphere import Hyperspherical
@@ -17,6 +17,8 @@ from src.shared.datasets import Dataset, DatasetType, DatasetVersion
 from src.shared.torch.backbones import (ViTAEv2_B, load_for_transfer_learning,
                                         t2t_vit_t_14)
 from src.shared.torch.metric import Metric
+import math
+
 
 PRETRAINED_WEIGHTS_DIR = Path(os.getcwd()) / "pretrained_weights"
 PRETRAINED_T2T_VITT_T14 = PRETRAINED_WEIGHTS_DIR / "81.7_T2T_ViTt_14.pth.tar"
@@ -27,6 +29,7 @@ torch.set_float32_matmul_precision("high")
 MODEL_DICT = {
     "hyperspherical": Hyperspherical,
     "hyperbolic-uniform": HyperbolicUniform,
+    "hyperbolic-learned": HyperbolicLearned,
     "baseline": Baseline,
 }
 
@@ -34,6 +37,7 @@ BACKBONE_DICT = {
     "t2t_vit": (t2t_vit_t_14, PRETRAINED_T2T_VITT_T14, 384),
     "vitaev2": (ViTAEv2_B, PRETRAINED_VITAEv2, 1024),
 }
+
 
 def get_prototypes(prototype, ds):
     # curvature = 1
@@ -47,6 +51,7 @@ def get_prototypes(prototype, ds):
 
     return prototypes
 
+
 def create_model(model_name, model_hparams, ds):
     prototypes = get_prototypes(model_hparams["prototypes"], ds)
     model_hparams["prototypes"] = prototypes
@@ -57,9 +62,9 @@ def create_model(model_name, model_hparams, ds):
     else:
         init, path_to_weights, out_features = BACKBONE_DICT[model_hparams["backbone_name"]]
         backbone = init(
-            drop_rate=0.0,
-            attn_drop_rate=0.0,
-            drop_path_rate=0.0,
+            # drop_rate=0.0,
+            # attn_drop_rate=0.0,
+            # drop_path_rate=0.0,
         )
 
         load_for_transfer_learning(
@@ -75,12 +80,13 @@ def create_model(model_name, model_hparams, ds):
     if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS, DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS]:
         pass
     else:
-        print("Freezing backbone")
-        for param in model.model.parameters():
-            param.requires_grad = False
+        if model_hparams["freeze_backbone"]:
+            print("Freezing backbone")
+            for param in model.model.parameters():
+                param.requires_grad = False
 
-        for param in model.model.head.parameters():
-            param.requires_grad = True
+            for param in model.model.head.parameters():
+                param.requires_grad = True
 
     return model
 
@@ -93,6 +99,15 @@ def get_num_classes(ds: Dataset):
         split = ds.metadata["per_level"][0]["split"]
         return split, total - split
     raise Exception("could not retrieve num classes")
+
+
+def linear_warmup_cosine_decay(warmup_steps, total_steps):
+    def lr_lambda(current_step):
+        if current_step < warmup_steps:
+            return float(current_step) / float(max(1, warmup_steps))
+        progress = float(current_step - warmup_steps) / float(max(1, total_steps - warmup_steps))
+        return 0.5 * (1.0 + math.cos(math.pi * progress))
+    return lr_lambda
 
 
 class LightningGBIF(L.LightningModule):
@@ -111,7 +126,7 @@ class LightningGBIF(L.LightningModule):
         self.model = create_model(model_name, model_hparams, ds)
 
         self.freeze_backbone = model_hparams["freeze_backbone"]
-        self.freeze_epochs = model_hparams["freeze_epochs"]
+        # self.freeze_epochs = model_hparams["freeze_epochs"]
 
         self.pred_fn = self.model.pred_fn
         self.loss_fn = self.model.loss_fn
@@ -131,155 +146,32 @@ class LightningGBIF(L.LightningModule):
         return self.model(x)
 
     def configure_optimizers(self):
+        lr = self.optimizer_hparams["learning_rate"]
+        weight_decay = self.optimizer_hparams["weight_decay"]
+
+        params = filter(lambda p: p.requires_grad, self.model.parameters())
+        optimizer = torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
+
         total_steps = self.trainer.estimated_stepping_batches
-        freeze_steps = self.trainer.estimated_stepping_batches * self.freeze_epochs // self.trainer.max_epochs
-        warmup_steps = 500
+        warmup_steps = int(0.05 * self.trainer.estimated_stepping_batches)
 
-        start_lr = self.optimizer_hparams["learning_rate"]
-        backbone_lr = self.optimizer_hparams["backbone_learning_rate"]
-        warmup_lr_init = 1e-6
-        min_lr = 1e-5
+        def lr_lambda(current_step):
+            if current_step < warmup_steps:
+                return float(current_step) / float(max(1, warmup_steps))
+            progress = float(current_step - warmup_steps) / float(max(1, total_steps - warmup_steps))
+            return 0.5 * (1.0 + math.cos(math.pi * progress))
 
-        # Separate params
-        head_params = []
-        backbone_params = []
-
-        for name, param in self.model.named_parameters():
-            if "pos_embed" in name:
-                continue  # always frozen
-            if not param.requires_grad:
-                continue
-            if "head" in name:
-                head_params.append(param)
-            else:
-                backbone_params.append(param)
-
-
-        if self.freeze_backbone:
-            optimizer = torch.optim.AdamW(head_params, lr=start_lr, **{
-                k: v for k, v in self.optimizer_hparams.items()
-                if k not in ["learning_rate", "backbone_learning_rate"]
-            })
-
-            def lr_lambda(step):
-                if step < warmup_steps:
-                    return (warmup_lr_init / start_lr) + (1.0 - warmup_lr_init / start_lr) * (step / warmup_steps)
-                decay_steps = total_steps - warmup_steps
-                decay_step = step - warmup_steps
-                cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_step / decay_steps))
-                return (min_lr / start_lr) + (1 - min_lr / start_lr) * cosine_decay
-
-            scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
-
-        else:
-            optimizer = torch.optim.AdamW([
-                {"params": head_params, "lr": start_lr},
-                {"params": backbone_params, "lr": backbone_lr},
-            ], **{k: v for k, v in self.optimizer_hparams.items() if k != "learning_rate" and k != "backbone_learning_rate"})
-
-            def lr_lambda_builder(base_lr, phase_steps, warmup_steps):
-                def lr_lambda(step):
-                    if step < warmup_steps:
-                        return (warmup_lr_init / base_lr) + (1.0 - warmup_lr_init / base_lr) * (step / warmup_steps)
-                    decay_steps = phase_steps - warmup_steps
-                    decay_step = step - warmup_steps
-                    cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_step / decay_steps))
-                    return (min_lr / base_lr) + (1 - min_lr / base_lr) * cosine_decay
-                return lr_lambda
-
-            def global_lr_lambda(step):
-                if step < freeze_steps:
-                    return [
-                        lr_lambda_builder(start_lr, freeze_steps, warmup_steps)(step),
-                        0.0  # freeze backbone
-                    ]
-                adjusted_step = step - freeze_steps
-                finetune_steps = total_steps - freeze_steps
-                return [
-                    lr_lambda_builder(start_lr, finetune_steps, warmup_steps)(adjusted_step),
-                    lr_lambda_builder(backbone_lr, finetune_steps, warmup_steps)(adjusted_step)
-                ]
-
-            class TwoPhaseLR(torch.optim.lr_scheduler.LambdaLR):
-                def __init__(self, optimizer, lr_lambda_fn):
-                    self.lr_lambda_fn = lr_lambda_fn
-                    super().__init__(optimizer, lr_lambda=lambda step: 1.0)
-
-                def get_lr(self):
-                    lambdas = self.lr_lambda_fn(self.last_epoch)
-                    return [
-                        group['initial_lr'] * lambdas[i]
-                        for i, group in enumerate(self.optimizer.param_groups)
-                    ]
-
-            scheduler = TwoPhaseLR(optimizer, lr_lambda_fn=global_lr_lambda)
+        scheduler = LambdaLR(optimizer, lr_lambda)
 
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "interval": "step",
+                "interval": "step",  # applies every training step
                 "frequency": 1,
             },
         }
 
-    # def configure_optimizers(self):
-    #     params = filter(lambda p: p.requires_grad, self.model.parameters())
-    #
-    #     optim_dict = {
-    #         "adam": optim.AdamW,
-    #         "sgd": optim.SGD,
-    #     }
-    #
-    #     optimizer = optim_dict[self.optimizer_name](params, **self.optimizer_hparams)
-    #
-    #     total_steps = self.trainer.estimated_stepping_batches
-    #
-    #     # assert total_steps is not None
-    #     # assert self.trainer.max_epochs is not None
-    #
-    #     # epoch_steps = total_steps // int(self.trainer.max_epochs)
-    #
-    #     # step_offset = fixed_lr_epochs * epoch_steps
-    #
-    #     self.freeze_epochs
-    #
-    #     start_lr = self.optimizer_hparams["learning_rate"]
-    #     bacekbone_lr = self.optimizer_hparams["backbone_learning_rate"]
-    #
-    #     warmup_steps = 500
-    #     warmup_lr_init = 1e-6
-    #     min_lr = 1e-4
-    #
-    #     def lr_lambda(current_step):
-    #         # current_epoch = current_step // epoch_steps
-    #
-    #         # if current_epoch < fixed_lr_epochs:
-    #         #     return 1e-3 / base_lr
-    #
-    #         # adjusted_step = current_step - step_offset
-    #         adjusted_step = current_step
-    #
-    #         if adjusted_step < warmup_steps:
-    #             return (warmup_lr_init / base_lr) + (
-    #                 (1.0 - warmup_lr_init / base_lr) * (adjusted_step / warmup_steps)
-    #             )
-    #
-    #         decay_steps = total_steps - warmup_steps
-    #         decay_step = adjusted_step - warmup_steps
-    #         cosine_decay = 0.5 * (1 + math.cos(math.pi * decay_step / decay_steps))
-    #         return (min_lr / base_lr) + (1 - min_lr / base_lr) * cosine_decay
-    #
-    #     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
-    #
-    #     return {
-    #         "optimizer": optimizer,
-    #         "lr_scheduler": {
-    #             "scheduler": scheduler,
-    #             "interval": "step",
-    #             "frequency": 1,
-    #         },
-    #     }
 
     def training_step(self, batch):
         self.log("step", self.current_epoch)
@@ -300,18 +192,6 @@ class LightningGBIF(L.LightningModule):
         self.log_epoch(lr, "lr")
 
         return loss
-
-    def unfreeze_backbone(self):
-        for name, param in self.model.model.named_parameters():
-            if "pos_embed" not in name:
-                param.requires_grad = False
-            else:
-                param.requires_grad = True
-
-    def on_train_epoch_start(self):
-        if not self.freeze_backbone:
-            if self.current_epoch == self.freeze_epochs:
-                self.unfreeze_backbone()
 
     def validation_step(self, batch):
         imgs, genus_labels, species_labels = batch

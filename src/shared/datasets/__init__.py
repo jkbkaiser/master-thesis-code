@@ -152,7 +152,7 @@ class Dataset():
         dataloader = data.DataLoader(
             dataset,
             batch_size=self.batch_size,
-            num_workers=19,
+            num_workers=NUM_PROC,
             shuffle=split == DatasetSplit.TRAIN.value,
             drop_last=True,
             collate_fn=lambda batch: self._collate(batch, self.use_torch),
