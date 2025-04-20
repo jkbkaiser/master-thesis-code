@@ -1,6 +1,7 @@
 import argparse
 import json
-from collections import Counter
+import random
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import cast
 
@@ -93,6 +94,39 @@ def map_to_label(row, labels2id):
     return row
 
 
+def stratified_custom_split(dataset, label_col="species", seed=42):
+    random.seed(seed)
+    label2indices = defaultdict(list)
+
+    for idx, example in enumerate(dataset):
+        print(idx, example, label_col)
+        label2indices[example[label_col]].append(idx)
+
+    train_indices, valid_indices, test_indices = [], [], []
+
+    for label, indices in label2indices.items():
+        if len(indices) < 3:
+            continue
+
+        random.shuffle(indices)
+
+        n = len(indices)
+        n_train = int(n * 5 / 7)
+        n_valid = int(n * 1 / 7)
+
+        train_indices.extend(indices[:n_train])
+        valid_indices.extend(indices[n_train:n_train + n_valid])
+        test_indices.extend(indices[n_train + n_valid:])
+
+    ds_dict = DatasetDict({
+        "train": dataset.select(train_indices),
+        "valid": dataset.select(valid_indices),
+        "test": dataset.select(test_indices)
+    })
+
+    return ds_dict
+
+
 def run(args):
     ds: DatasetDict = cast(DatasetDict, load_dataset(HUGGING_FACE_SOURCE_DATASET))
     ds = ds.filter(valid_species)
@@ -154,15 +188,9 @@ def run(args):
     most_occuring_species = id2label[label]
     print(f"most occuring species after mapping: {most_occuring_species}")
 
-    ds_train_validtest = ds["data"].train_test_split(test_size=0.2, seed=42)
-    ds_validtest = ds_train_validtest["test"].train_test_split(test_size=0.5, seed=42)
-    ds_dict = DatasetDict(
-        {
-            "train": ds_train_validtest["train"],
-            "valid": ds_validtest["train"],
-            "test": ds_validtest["test"],
-        }
-    )
+
+    ds_dict = stratified_custom_split(ds["data"])
+    print(ds_dict)
 
     ds_dict.push_to_hub(HUGGING_FACE_PROCESSED_FLAT_DATASET, private=True)
 
