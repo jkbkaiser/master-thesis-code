@@ -23,7 +23,7 @@ class Metric():
     def reset(self):
         self.valid_conf_m = torch.zeros((self.num_species, self.num_species), dtype=torch.int64).to(DEVICE)
 
-    def process_train_batch(self, genus_preds, genus_labels, species_preds, species_labels):
+    def process_train_batch(self, genus_preds, genus_labels, species_logits, species_preds, species_labels):
         correct_genus = genus_preds == genus_labels
         correct_species = species_preds == species_labels
         correct_both = correct_species & correct_genus
@@ -32,12 +32,16 @@ class Metric():
         acc_species = correct_species.float().mean().item()
         acc_all = correct_both.float().mean().item()
 
+        acc_top_k = self.topk_accuracy(species_logits, species_labels)
+
         batch_metrics = {
             "accuracy_genus": acc_genus,
             "accuracy_species": acc_species,
             "accuracy_avg": (acc_genus + acc_species) / 2,
             "accuracy_all": acc_all,
         }
+
+        batch_metrics.update(acc_top_k)
 
         return batch_metrics
 
@@ -54,7 +58,22 @@ class Metric():
             ].to(torch.int64),
         )
 
-    def process_valid_batch(self, genus_preds, genus_labels, species_preds, species_labels):
+    def topk_accuracy(self, species_logits, species_labels, topk=(5,)):
+        with torch.no_grad():
+            max_k = max(topk)
+            _, pred = species_logits.topk(max_k, dim=1, largest=True, sorted=True)  # (B, max_k)
+            pred = pred.t()  # (max_k, B)
+            correct = pred.eq(species_labels.view(1, -1).expand_as(pred))  # (max_k, B)
+
+            res = {}
+            for k in topk:
+                correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
+                res[f"top{k}_accuracy"] = (correct_k / species_labels.size(0)).item()
+
+            return res
+
+
+    def process_valid_batch(self, genus_preds, genus_labels, species_logits, species_preds, species_labels):
         correct_genus = genus_preds == genus_labels
         correct_species = species_preds == species_labels
         correct_both = correct_species & correct_genus
@@ -63,12 +82,16 @@ class Metric():
         acc_species = correct_species.float().mean().item()
         acc_all = correct_both.float().mean().item()
 
+        acc_top_k = self.topk_accuracy(species_logits, species_labels)
+
         batch_metrics = {
             "accuracy_genus": acc_genus,
             "accuracy_species": acc_species,
             "accuracy_avg": (acc_genus + acc_species) / 2,
             "accuracy_all": acc_all,
         }
+
+        batch_metrics.update(acc_top_k)
 
         self.compute_valid_conf_m(species_preds, species_labels)
 

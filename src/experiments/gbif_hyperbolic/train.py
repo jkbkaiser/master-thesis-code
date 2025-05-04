@@ -88,7 +88,7 @@ def run(args):
         logger=mlf_logger,
         callbacks=[early_stop_callback, checkpoint_callback],
         profiler="simple",
-        enable_progress_bar=False,
+        enable_progress_bar=args.progress_bar,
     )
 
     logging.getLogger("lightning.pytorch").setLevel(logging.FATAL)
@@ -171,7 +171,6 @@ def parse_args():
         "--show-progress-bar",
         dest="progress_bar",
         action="store_true",
-        default=False,
         help="Show progress bar"
     )
 

@@ -1,3 +1,4 @@
+import math
 import os
 from pathlib import Path
 
@@ -9,7 +10,8 @@ from torch.optim.lr_scheduler import LambdaLR
 
 from src.constants import DEVICE
 from src.experiments.gbif_hyperbolic.models.baseline import Baseline
-from src.experiments.gbif_hyperbolic.models.hyperbolic_learned import HyperbolicLearned
+from src.experiments.gbif_hyperbolic.models.hyperbolic_learned import \
+    HyperbolicLearned
 from src.experiments.gbif_hyperbolic.models.hyperbolic_uniform import \
     HyperbolicUniform
 from src.experiments.gbif_hyperbolic.models.hypersphere import Hyperspherical
@@ -17,8 +19,6 @@ from src.shared.datasets import Dataset, DatasetType, DatasetVersion
 from src.shared.torch.backbones import (ViTAEv2_B, load_for_transfer_learning,
                                         t2t_vit_t_14)
 from src.shared.torch.metric import Metric
-import math
-
 
 PRETRAINED_WEIGHTS_DIR = Path(os.getcwd()) / "pretrained_weights"
 PRETRAINED_T2T_VITT_T14 = PRETRAINED_WEIGHTS_DIR / "81.7_T2T_ViTt_14.pth.tar"
@@ -182,7 +182,7 @@ class LightningGBIF(L.LightningModule):
 
         species_preds = self.pred_fn(logits)
         genus_preds = torch.zeros_like(genus_labels)
-        metrics = self.metric.process_train_batch(genus_preds, genus_labels, species_preds, species_labels)
+        metrics = self.metric.process_train_batch(genus_preds, genus_labels, logits, species_preds, species_labels)
 
         self.log_epoch(loss, "train_loss")
         self.log_epoch(metrics, "train_")
@@ -199,7 +199,7 @@ class LightningGBIF(L.LightningModule):
 
         species_preds = self.pred_fn(logits)
         genus_preds = torch.zeros_like(genus_labels)
-        metrics = self.metric.process_valid_batch(genus_preds, genus_labels, species_preds, species_labels)
+        metrics = self.metric.process_valid_batch(genus_preds, genus_labels, logits, species_preds, species_labels)
 
         self.log_epoch(metrics, "valid_")
 

@@ -3,7 +3,7 @@ import numpy as np
 import torch
 
 # Load saved prototypes
-prototypes = np.load("./prototypes/gbif_genus_species_10k/prototypes-2-gbif_genus_species_10k.npy")
+prototypes = np.load("./prototypes/2-levels/64-gbif_genus_species_100k.npy")
 
 # Ensure normalization
 # prototypes = prototypes / np.linalg.norm(prototypes, axis=1, keepdims=True)
