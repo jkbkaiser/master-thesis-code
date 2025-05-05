@@ -10,8 +10,6 @@ def hyperbolic_contrastive_loss(embeddings, labels, ball, temperature=0.07):
     labels: [B] int class labels
     ball: geoopt.PoincareBallExact
     """
-    print("Max embedding norm:", embeddings.norm(p=2, dim=1).max().item())
-
     # Map to hyperbolic space
     hyp_emb = ball.expmap0(embeddings)  # [B, D]
 
