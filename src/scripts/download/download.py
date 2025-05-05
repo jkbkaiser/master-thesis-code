@@ -287,8 +287,6 @@ def parse_args():
         prog="GBIF extractor",
         description="Scripts for downloading gbif mediadata and creating hugging face datasets",
     )
-    parser.add_argument("-ne", "--num-entries", default=100, required=False, type=int)
-    parser.add_argument("--create-csv", action="store_true", default=False)
     return parser.parse_args()
 
 

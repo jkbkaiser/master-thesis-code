@@ -42,7 +42,6 @@ def get_prototypes(prototype, ds):
     prototype_path = Path("./prototypes") / ds.version.value / f"prototypes-{prototype}-{ds.version.value}.npy"
     prototypes = torch.from_numpy(np.load(prototype_path)).float()
     prototypes = F.normalize(prototypes, p=2, dim=1).to(DEVICE)
-
     return prototypes
 
 
