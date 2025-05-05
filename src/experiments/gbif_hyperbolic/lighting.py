@@ -6,7 +6,6 @@ import lightning as L
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch.optim.lr_scheduler import LambdaLR
 
 from src.constants import DEVICE
 from src.experiments.gbif_hyperbolic.models.baseline import Baseline
@@ -40,14 +39,9 @@ BACKBONE_DICT = {
 
 
 def get_prototypes(prototype, ds):
-    # curvature = 1
-    # scale_factor = 0.95
-
     prototype_path = Path("./prototypes") / ds.version.value / f"prototypes-{prototype}-{ds.version.value}.npy"
     prototypes = torch.from_numpy(np.load(prototype_path)).float()
     prototypes = F.normalize(prototypes, p=2, dim=1).to(DEVICE)
-
-    # prototypes = prototypes.cuda() * scale_factor / math.sqrt(curvature)
 
     return prototypes
 
@@ -152,24 +146,24 @@ class LightningGBIF(L.LightningModule):
         params = filter(lambda p: p.requires_grad, self.model.parameters())
         optimizer = torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
 
-        total_steps = self.trainer.estimated_stepping_batches
-        warmup_steps = int(0.05 * self.trainer.estimated_stepping_batches)
+        # total_steps = self.trainer.estimated_stepping_batches
+        # warmup_steps = int(0.05 * self.trainer.estimated_stepping_batches)
 
-        def lr_lambda(current_step):
-            if current_step < warmup_steps:
-                return float(current_step) / float(max(1, warmup_steps))
-            progress = float(current_step - warmup_steps) / float(max(1, total_steps - warmup_steps))
-            return 0.5 * (1.0 + math.cos(math.pi * progress))
+        # def lr_lambda(current_step):
+        #     if current_step < warmup_steps:
+        #         return float(current_step) / float(max(1, warmup_steps))
+        #     progress = float(current_step - warmup_steps) / float(max(1, total_steps - warmup_steps))
+        #     return 0.5 * (1.0 + math.cos(math.pi * progress))
 
-        scheduler = LambdaLR(optimizer, lr_lambda)
+        # scheduler = LambdaLR(optimizer, lr_lambda)
 
         return {
             "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "interval": "step",  # applies every training step
-                "frequency": 1,
-            },
+            # "lr_scheduler": {
+            #     "scheduler": scheduler,
+            #     "interval": "step",  # applies every training step
+            #     "frequency": 1,
+            # },
         }
 
 
@@ -177,8 +171,8 @@ class LightningGBIF(L.LightningModule):
         self.log("step", self.current_epoch)
 
         imgs, genus_labels, species_labels = batch
-        logits = self(imgs)
-        loss = self.loss_fn(logits, genus_labels, species_labels)
+        logits, hyp_emb = self(imgs)
+        loss = self.loss_fn(logits, genus_labels, species_labels, hyp_emb)
 
         species_preds = self.pred_fn(logits)
         genus_preds = torch.zeros_like(genus_labels)
@@ -195,7 +189,7 @@ class LightningGBIF(L.LightningModule):
 
     def validation_step(self, batch):
         imgs, genus_labels, species_labels = batch
-        logits = self(imgs)
+        logits, _ = self(imgs)
 
         species_preds = self.pred_fn(logits)
         genus_preds = torch.zeros_like(genus_labels)
