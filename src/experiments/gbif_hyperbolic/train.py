@@ -7,17 +7,26 @@ from dotenv import load_dotenv
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import MLFlowLogger
 
-from src.experiments.gbif_hyperbolic.lighting import LightningGBIF
+from src.experiments.gbif_hyperbolic.lighting import MODEL_DICT, LightningGBIF
 from src.shared.datasets import Dataset, DatasetVersion
+from src.shared.prototypes import PrototypeVersion
 
 load_dotenv()
 MLFLOW_SERVER = os.environ["MLFLOW_SERVER"]
 CHECKPOINT_DIR = os.environ["CHECKPOINT_DIR"]
 
 
+def get_model_architecture(model, ds: Dataset):
+    if model == "hyperbolic-genus-species":
+        return ds.labelcount_per_level
+    else:
+        return ds.labelcount_per_level[-1]
+
+
 def run(args):
     ds = Dataset(args.dataset)
     ds.load(batch_size=args.batch_size, use_torch=True)
+    architecture = get_model_architecture(args.model, ds)
 
     mlf_logger = MLFlowLogger(
         experiment_name=args.experiment_name,
@@ -35,9 +44,10 @@ def run(args):
 
     model_hparams = {
         "backbone_name": args.backbone,
-        "architecture": ds.hierarchy[0].shape[-1],
         "freeze_backbone": args.freeze_backbone,
         "prototypes": args.prototypes,
+        "prototype_dim": args.prototype_dim,
+        "architecture": architecture,
     }
 
     if not args.freeze_backbone:
@@ -113,7 +123,7 @@ def parse_args():
         default="hyperspherical",
         required=False,
         type=str,
-        choices=["hyperspherical", "hyperbolic-uniform", "baseline", "hyperbolic-learned"],
+        choices=MODEL_DICT.keys(),
     )
     parser.add_argument(
         "--backbone",
@@ -142,10 +152,16 @@ def parse_args():
     )
     parser.add_argument(
         "--prototypes",
-        default=64,
+        default=PrototypeVersion.SPECIES_HYPERSPHERE_UNIFORM.value,
+        required=False,
+        type=str,
+        choices=[v.value for v in PrototypeVersion],
+    )
+    parser.add_argument(
+        "--prototype_dim",
+        default=128,
         required=False,
         type=int,
-        choices=[64, 128, 256, 512],
     )
     parser.add_argument(
         "-o",

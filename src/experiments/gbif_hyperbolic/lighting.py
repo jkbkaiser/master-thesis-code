@@ -3,18 +3,18 @@ import os
 from pathlib import Path
 
 import lightning as L
-import numpy as np
 import torch
-import torch.nn.functional as F
 
-from src.constants import DEVICE
 from src.experiments.gbif_hyperbolic.models.baseline import Baseline
+from src.experiments.gbif_hyperbolic.models.hyperbolic_genus_species import \
+    GenusSpeciesPoincare
 from src.experiments.gbif_hyperbolic.models.hyperbolic_learned import \
     HyperbolicLearned
 from src.experiments.gbif_hyperbolic.models.hyperbolic_uniform import \
     HyperbolicUniform
 from src.experiments.gbif_hyperbolic.models.hypersphere import Hyperspherical
 from src.shared.datasets import Dataset, DatasetType, DatasetVersion
+from src.shared.prototypes import get_prototypes
 from src.shared.torch.backbones import (ViTAEv2_B, load_for_transfer_learning,
                                         t2t_vit_t_14)
 from src.shared.torch.metric import Metric
@@ -29,6 +29,7 @@ MODEL_DICT = {
     "hyperspherical": Hyperspherical,
     "hyperbolic-uniform": HyperbolicUniform,
     "hyperbolic-learned": HyperbolicLearned,
+    "hyperbolic-genus-species": GenusSpeciesPoincare,
     "baseline": Baseline,
 }
 
@@ -38,15 +39,8 @@ BACKBONE_DICT = {
 }
 
 
-def get_prototypes(prototype, ds):
-    prototype_path = Path("./prototypes") / ds.version.value / f"prototypes-{prototype}-{ds.version.value}.npy"
-    prototypes = torch.from_numpy(np.load(prototype_path)).float()
-    prototypes = F.normalize(prototypes, p=2, dim=1).to(DEVICE)
-    return prototypes
-
-
 def create_model(model_name, model_hparams, ds):
-    prototypes = get_prototypes(model_hparams["prototypes"], ds)
+    prototypes = get_prototypes(model_hparams["prototypes"], ds.version.value, model_hparams["prototype_dim"])
     model_hparams["prototypes"] = prototypes
 
     if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS, DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS]:
@@ -145,37 +139,18 @@ class LightningGBIF(L.LightningModule):
         params = filter(lambda p: p.requires_grad, self.model.parameters())
         optimizer = torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
 
-        # total_steps = self.trainer.estimated_stepping_batches
-        # warmup_steps = int(0.05 * self.trainer.estimated_stepping_batches)
-
-        # def lr_lambda(current_step):
-        #     if current_step < warmup_steps:
-        #         return float(current_step) / float(max(1, warmup_steps))
-        #     progress = float(current_step - warmup_steps) / float(max(1, total_steps - warmup_steps))
-        #     return 0.5 * (1.0 + math.cos(math.pi * progress))
-
-        # scheduler = LambdaLR(optimizer, lr_lambda)
-
-        return {
-            "optimizer": optimizer,
-            # "lr_scheduler": {
-            #     "scheduler": scheduler,
-            #     "interval": "step",  # applies every training step
-            #     "frequency": 1,
-            # },
-        }
+        return {"optimizer": optimizer}
 
 
     def training_step(self, batch):
         self.log("step", self.current_epoch)
 
         imgs, genus_labels, species_labels = batch
-        logits, hyp_emb = self(imgs)
-        loss = self.loss_fn(logits, genus_labels, species_labels, hyp_emb)
+        logits = self(imgs)
+        loss = self.loss_fn(logits, genus_labels, species_labels)
 
-        species_preds = self.pred_fn(logits)
-        genus_preds = torch.zeros_like(genus_labels)
-        metrics = self.metric.process_train_batch(genus_preds, genus_labels, logits, species_preds, species_labels)
+        [genus_preds, species_preds] = self.pred_fn(logits)
+        metrics = self.metric.process_train_batch(genus_preds, genus_labels, logits[1], species_preds, species_labels)
 
         self.log_epoch(loss, "train_loss")
         self.log_epoch(metrics, "train_")
@@ -188,11 +163,10 @@ class LightningGBIF(L.LightningModule):
 
     def validation_step(self, batch):
         imgs, genus_labels, species_labels = batch
-        logits, _ = self(imgs)
+        logits = self(imgs)
 
-        species_preds = self.pred_fn(logits)
-        genus_preds = torch.zeros_like(genus_labels)
-        metrics = self.metric.process_valid_batch(genus_preds, genus_labels, logits, species_preds, species_labels)
+        [genus_preds, species_preds] = self.pred_fn(logits)
+        metrics = self.metric.process_valid_batch(genus_preds, genus_labels, logits[1], species_preds, species_labels)
 
         self.log_epoch(metrics, "valid_")
 
