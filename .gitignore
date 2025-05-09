@@ -8,7 +8,7 @@ mlruns
 mlartifacts
 pretrained_weights
 checkpoints
-prototypes
+/prototypes/
 logs
 
 # Byte-compiled / optimized / DLL files
