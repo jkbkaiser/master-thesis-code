@@ -14,8 +14,22 @@ module load 2024
 source .env
 source .venv/bin/activate
 
+# python -m src.experiments.gbif_hyperbolic.train \
+#     -m hyperbolic-genus-species \
+#     -d gbif_genus_species_100k \
+#     --weight-decay 0.02 \
+#     --learning-rate 0.0001 \
+#     --backbone-learning-rate 0.0001 \
+#     --prototype_dim 128 \
+#     --prototypes genus_species_poincare \
+#     --freeze-backbone \
+#     --num-epochs 5 \
+#     --batch-size 64 \
+#     --freeze-epochs 0 \
+#     --machine snellius
+
 python -m src.experiments.gbif_hyperbolic.train \
-    -m hyperbolic-genus-species \
+    -m hyperbolic-uniform \
     -d gbif_genus_species_100k \
     --weight-decay 0.02 \
     --learning-rate 0.0001 \
