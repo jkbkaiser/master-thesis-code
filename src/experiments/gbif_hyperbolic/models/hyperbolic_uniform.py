@@ -74,12 +74,12 @@ class HyperbolicUniform(nn.Module):
     def forward(self, x):
         out_feature_euc = self.model(x)
         out_feature_hyp = self.ball.expmap0(out_feature_euc)
-        return -self.ball.dist(self.prototypes, out_feature_hyp[:, None, :]) / 0.07, out_feature_hyp
+        return -self.ball.dist(self.prototypes, out_feature_hyp[:, None, :]) / 0.07
 
     def pred_fn(self, logits):
         return logits.argmax(dim=1)
 
-    def loss_fn(self, logits, genus_labels, species_labels, hyp_emb):
+    def loss_fn(self, logits, genus_labels, species_labels):
         ce_loss = self.criterion(logits, species_labels)
         # contrastive = hyperbolic_contrastive_loss(hyp_emb, species_labels, self.ball, temperature=0.07)
         # return ce_loss + 0.5 * contrastive

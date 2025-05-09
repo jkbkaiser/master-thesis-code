@@ -149,8 +149,16 @@ class LightningGBIF(L.LightningModule):
         logits = self(imgs)
         loss = self.loss_fn(logits, genus_labels, species_labels)
 
-        [genus_preds, species_preds] = self.pred_fn(logits)
-        metrics = self.metric.process_train_batch(genus_preds, genus_labels, logits[1], species_preds, species_labels)
+        preds = self.pred_fn(logits)
+
+        if len(preds) == 2:
+            [genus_preds, species_preds] = preds
+            metrics = self.metric.process_train_batch(genus_preds, genus_labels, logits[1], species_preds, species_labels)
+        else:
+            species_preds = preds
+            genus_preds = torch.zeros_like(genus_labels)
+            metrics = self.metric.process_train_batch(genus_preds, genus_labels, logits, species_preds, species_labels)
+
 
         self.log_epoch(loss, "train_loss")
         self.log_epoch(metrics, "train_")
@@ -165,8 +173,15 @@ class LightningGBIF(L.LightningModule):
         imgs, genus_labels, species_labels = batch
         logits = self(imgs)
 
-        [genus_preds, species_preds] = self.pred_fn(logits)
-        metrics = self.metric.process_valid_batch(genus_preds, genus_labels, logits[1], species_preds, species_labels)
+        preds = self.pred_fn(logits)
+
+        if len(preds) == 2:
+            [genus_preds, species_preds] = preds
+            metrics = self.metric.process_valid_batch(genus_preds, genus_labels, logits[1], species_preds, species_labels)
+        else:
+            species_preds = preds
+            genus_preds = torch.zeros_like(genus_labels)
+            metrics = self.metric.process_valid_batch(genus_preds, genus_labels, logits, species_preds, species_labels)
 
         self.log_epoch(metrics, "valid_")
 
