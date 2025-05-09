@@ -48,6 +48,7 @@ def run(args):
         "prototypes": args.prototypes,
         "prototype_dim": args.prototype_dim,
         "architecture": architecture,
+        "temp": args.temp,
     }
 
     if not args.freeze_backbone:
@@ -176,6 +177,12 @@ def parse_args():
     )
     parser.add_argument(
         "--freeze-epochs", help="Unfreeze backbone during training", type=int, default=10, required=False
+    )
+    parser.add_argument(
+        "--temp",
+        type=float,
+        default=0.07,
+        help="Temp applied to the logits"
     )
     parser.add_argument(
         "--machine",

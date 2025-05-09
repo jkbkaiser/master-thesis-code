@@ -35,7 +35,7 @@ class ClassifierModule(nn.Module):
 
 
 class GenusSpeciesPoincare(nn.Module):
-    def __init__(self, backbone, out_features, architecture, prototypes, prototype_dim, **_):
+    def __init__(self, backbone, out_features, architecture, prototypes, prototype_dim, temp, **_):
         super().__init__()
 
         if backbone is not None:
@@ -49,12 +49,13 @@ class GenusSpeciesPoincare(nn.Module):
         self.ball = geoopt.PoincareBallExact(c=c)
 
         self.prototypes = (prototypes * 0.95) / c
-        self.prototypes = self.prototypes[1:]
+        self.prototypes = self.prototypes[1:] # Don't use the root node
 
         [self.num_genus, self.num_species] = architecture
         self.genus_prototypes = self.prototypes[:self.num_genus]
         self.species_protypes = self.prototypes[self.num_genus:]
 
+        self.temp = temp
         self.criterion = nn.CrossEntropyLoss()
 
     def forward(self, x):
@@ -63,9 +64,8 @@ class GenusSpeciesPoincare(nn.Module):
         feature_hyp_species = self.ball.expmap0(feature_euc_species)
 
         return [
-            -self.ball.dist(self.genus_prototypes[None, :, :], feature_hyp_genus[:, None, :]) / 0.07,
-            -self.ball.dist(self.species_protypes[None, :, :], feature_hyp_species[:, None, :]) / 0.07
-        ]
+            -self.ball.dist(self.genus_prototypes[None, :, :], feature_hyp_genus[:, None, :]) / self.temp,
+            -self.ball.dist(self.species_protypes[None, :, :], feature_hyp_species[:, None, :]) / self.temp        ]
 
     def pred_fn(self, logits):
         [genus_logits, species_logits] = logits
