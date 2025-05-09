@@ -72,7 +72,6 @@ class Metric():
 
             return res
 
-
     def process_valid_batch(self, genus_preds, genus_labels, species_logits, species_preds, species_labels):
         correct_genus = genus_preds == genus_labels
         correct_species = species_preds == species_labels
