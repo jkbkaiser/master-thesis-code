@@ -2,7 +2,6 @@ import uuid
 
 import matplotlib.pyplot as plt
 import numpy as np
-import requests
 
 from src.constants import CACHE_DIR, GOOGLE_BUCKET_URL
 from src.shared.datasets import DatasetVersion
@@ -34,10 +33,7 @@ num_genus = hierarchy.shape[0]
 num_species = hierarchy.shape[1]
 
 t = hierarchy.sum(axis=1)
-print("T")
-print(t[:10])
-print(np.sort(-t)[:10])
-chosen_genus_indices = (-t).argsort()[:10]
+chosen_genus_indices = (-t).argsort()[:3]
 
 # Setup plot
 fig, ax = plt.subplots(figsize=(8, 8))
@@ -53,13 +49,13 @@ ax.add_patch(circle)
 colors = plt.cm.get_cmap("tab10", 10)
 
 for idx, genus_idx in enumerate(chosen_genus_indices):
-    # genus_proto = prototypes[genus_idx]
-    # ax.scatter(*genus_proto, color=colors(idx), label=f"Genus {genus_idx}", edgecolor='black')
+    genus_proto = prototypes[genus_idx]
+    ax.scatter(*genus_proto, color=colors(idx), label=f"Genus {genus_idx}", edgecolor='black')
 
     # Get species belonging to this genus
     species_indices = np.where(hierarchy[genus_idx] == 1)[0]
     for species_rel_idx in species_indices:
-        species_proto = prototypes[species_rel_idx]
+        species_proto = prototypes[2883 + species_rel_idx]
         ax.scatter(*species_proto, color=colors(idx), alpha=0.5, s=30, zorder=2)
 
 plt.legend()

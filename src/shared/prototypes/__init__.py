@@ -11,6 +11,7 @@ from src.constants import DEVICE
 class PrototypeVersion(str, Enum):
     GENUS_SPECIES_POINCARE  = "genus_species_poincare"
     SPECIES_HYPERSPHERE_UNIFORM = "species_hypersphere_uniform"
+    SPECIES_HYPERSPHERE = "species_hypersphere"
 
 
 def get_prototypes(prototype_version, dataset_version, dimensionality):

@@ -6,6 +6,8 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 
+from src.constants import DEVICE
+
 
 def poincare_embeddings_loss(
     dists: torch.Tensor, targets: torch.Tensor
@@ -27,7 +29,7 @@ class BaseEmbedding(nn.Module):
         self.ball = ball
 
         self.weight = ManifoldParameter(
-            data=ManifoldTensor(num_embeddings, embedding_dim, manifold=ball).cuda()
+            data=ManifoldTensor(num_embeddings, embedding_dim, manifold=ball, device=DEVICE)
         )
 
         self.reset_embeddings()
