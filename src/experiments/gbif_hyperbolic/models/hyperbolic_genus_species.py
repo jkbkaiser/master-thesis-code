@@ -66,7 +66,8 @@ class GenusSpeciesPoincare(nn.Module):
 
         return [
             -self.ball.dist(self.genus_prototypes[None, :, :], feature_hyp_genus[:, None, :]) / self.temp,
-            -self.ball.dist(self.species_protypes[None, :, :], feature_hyp_species[:, None, :]) / self.temp        ]
+            -self.ball.dist(self.species_protypes[None, :, :], feature_hyp_species[:, None, :]) / self.temp
+        ]
 
     def pred_fn(self, logits):
         [genus_logits, species_logits] = logits

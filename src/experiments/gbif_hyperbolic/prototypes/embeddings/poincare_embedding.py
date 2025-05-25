@@ -1,12 +1,10 @@
 import torch
-import torch.nn as nn
 from geoopt.manifolds import PoincareBallExact
-from geoopt.tensor import ManifoldParameter, ManifoldTensor
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 
-from src.constants import DEVICE
+from .base import BaseEmbedding
 
 
 def poincare_embeddings_loss(
@@ -17,35 +15,6 @@ def poincare_embeddings_loss(
     denominator = logits.sum(dim=-1)
     loss = (numerator / denominator).log().mean().neg()
     return loss
-
-
-class BaseEmbedding(nn.Module):
-    def __init__(
-        self, num_embeddings: int, embedding_dim: int, ball: PoincareBallExact
-    ) -> None:
-        super(BaseEmbedding, self).__init__()
-        self.num_embeddings = num_embeddings
-        self.embedding_dim = embedding_dim
-        self.ball = ball
-
-        self.weight = ManifoldParameter(
-            data=ManifoldTensor(num_embeddings, embedding_dim, manifold=ball, device=DEVICE)
-        )
-
-        self.reset_embeddings()
-
-    def reset_embeddings(self) -> None:
-        nn.init.uniform_(
-            tensor=self.weight,
-            a=-0.001,
-            b=0.001,
-        )
-
-    def forward(self, labels: torch.Tensor) -> torch.Tensor:
-        return self.weight[labels]
-
-    def score(self, edges: torch.Tensor, **kwargs) -> torch.Tensor:
-        raise NotImplementedError
 
 
 class PoincareEmbedding(BaseEmbedding):

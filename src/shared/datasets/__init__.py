@@ -19,28 +19,10 @@ class DatasetSplit(str, Enum):
     TEST = "test"
 
 
-class DatasetType(str, Enum):
-    FLAT = "FLAT"
-    GENUS_SPECIES = "GENUS_SPECIES"
-
-
 class DatasetVersion(str, Enum):
-    GBIF_FLAT_10K = "gbif_flat_10k"
-    GBIF_FLAT_10K_EMBEDDINGS = "gbif_flat_10k_embeddings"
-    GBIF_FLAT_100K = "gbif_flat_100k"
     GBIF_GENUS_SPECIES_10K = "gbif_genus_species_10k"
     GBIF_GENUS_SPECIES_10K_EMBEDDINGS = "gbif_genus_species_10k_embeddings"
     GBIF_GENUS_SPECIES_100K = "gbif_genus_species_100k"
-
-
-VERSION_TO_TYPE = {
-    DatasetVersion.GBIF_FLAT_10K: DatasetType.FLAT,
-    DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS: DatasetType.FLAT,
-    DatasetVersion.GBIF_FLAT_100K: DatasetType.FLAT,
-    DatasetVersion.GBIF_GENUS_SPECIES_10K: DatasetType.GENUS_SPECIES,
-    DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS: DatasetType.GENUS_SPECIES,
-    DatasetVersion.GBIF_GENUS_SPECIES_100K: DatasetType.GENUS_SPECIES,
-}
 
 
 class CustomDataset(data.Dataset):
@@ -74,7 +56,6 @@ class CustomDataset(data.Dataset):
 
 class Dataset():
     version: DatasetVersion
-    type: DatasetType
 
     split: int
     hierarchy: list[Union[np.ndarray, torch.Tensor]]
@@ -91,7 +72,6 @@ class Dataset():
 
     def __init__(self, version: DatasetVersion):
         self.version = version
-        self.type = VERSION_TO_TYPE[version]
 
     def load(self, batch_size: int, use_torch: bool = False, reload: bool = False):
         self.batch_size = batch_size
@@ -113,13 +93,7 @@ class Dataset():
         ]
 
         self.frequencies = self._get_frequencies()
-
-        if self.type == DatasetType.GENUS_SPECIES:
-            print("Loading hierarchy")
-            self.hierarchy = self._get_hierarchy(reload)
-
-        if self.type == DatasetType.FLAT:
-            self.split = int(self.metadata["per_level"][0]["split"])
+        self.hierarchy = self._get_hierarchy(reload)
 
         self.train_transform = transforms.Compose([
             transforms.RandomRotation(25),
@@ -162,13 +136,13 @@ class Dataset():
         return dataloader
 
     def _image_to_tensor_train(self, img, use_torch=False):
-        if self.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS, DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS]:
+        if self.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS]:
             return img
         transformed_img = self.train_transform(img.float())
         return transformed_img if use_torch else transformed_img.numpy()
 
     def _image_to_tensor(self, img, use_torch=False):
-        if self.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS, DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS]:
+        if self.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS]:
             return img
         transformed_img = self.transform(img.float())
         return transformed_img if use_torch else transformed_img.numpy()
@@ -185,7 +159,6 @@ class Dataset():
             if use_torch:
                 return torch.tensor(batch)
             return np.array(batch)
-
 
     def _get_metadata(self, reload: bool):
         directory = CACHE_DIR / self.version.value

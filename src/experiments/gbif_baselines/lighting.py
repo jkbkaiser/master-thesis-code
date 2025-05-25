@@ -6,7 +6,7 @@ import torch
 import torch.optim as optim
 
 from src.experiments.gbif_baselines.models import HAC, MARG, MPLC, PLC
-from src.shared.datasets import Dataset, DatasetType, DatasetVersion
+from src.shared.datasets import Dataset, DatasetVersion
 from src.shared.torch.backbones import (ViTAEv2_B, load_for_transfer_learning,
                                         t2t_vit_t_14)
 from src.shared.torch.metric import Metric
@@ -26,7 +26,7 @@ torch.set_float32_matmul_precision("medium")
 
 
 def create_model(model_name, model_hparams, ds):
-    if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS, DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS]:
+    if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS]:
         out_features = 384
         backbone = None
     else:
@@ -48,7 +48,7 @@ def create_model(model_name, model_hparams, ds):
     cls = MODEL_DICT[model_name]
     model = cls(backbone, out_features, **model_hparams, ds=ds)
 
-    if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS, DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS]:
+    if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS]:
         pass
     else:
 
@@ -61,16 +61,6 @@ def create_model(model_name, model_hparams, ds):
                 param.requires_grad = True
 
     return model
-
-
-def get_num_classes(ds: Dataset):
-    if ds.type == DatasetType.GENUS_SPECIES:
-        return ds.labelcount_per_level
-    if ds.type == DatasetType.FLAT:
-        total = ds.labelcount_per_level[0]
-        split = ds.metadata["per_level"][0]["split"]
-        return split, total - split
-    raise Exception("could not retrieve num classes")
 
 
 class LightningGBIF(L.LightningModule):
@@ -91,7 +81,7 @@ class LightningGBIF(L.LightningModule):
         self.pred_fn = self.model.pred_fn
         self.loss_fn = self.model.loss_fn
 
-        [self.num_classes_genus, self.num_classes_species] = get_num_classes(ds)
+        [self.num_classes_genus, self.num_classes_species] = ds.labelcount_per_level
         self.metric: Metric = Metric(ds, self.num_classes_genus, self.num_classes_species)
 
     def log_epoch(self, value, name=None):
@@ -125,7 +115,13 @@ class LightningGBIF(L.LightningModule):
         loss = self.loss_fn(logits, genus_labels, species_labels)
 
         genus_preds, species_preds = self.pred_fn(logits)
-        metrics = self.metric.process_train_batch(genus_preds, genus_labels, species_preds, species_labels)
+
+        if len(logits) == 2:
+            species_logits = logits[1]
+        else:
+            species_logits = logits
+
+        metrics = self.metric.process_train_batch(genus_preds, genus_labels, species_logits, species_preds, species_labels)
 
         self.log_epoch(loss, "train_loss")
         self.log_epoch(metrics, "train_")
@@ -136,7 +132,13 @@ class LightningGBIF(L.LightningModule):
         imgs, genus_labels, species_labels = batch
         logits = self(imgs)
         genus_preds, species_preds = self.pred_fn(logits)
-        metrics = self.metric.process_valid_batch(genus_preds, genus_labels, species_preds, species_labels)
+
+        if len(logits) == 2:
+            species_logits = logits[1]
+        else:
+            species_logits = logits
+
+        metrics = self.metric.process_valid_batch(genus_preds, genus_labels, species_logits, species_preds, species_labels)
 
         self.log_epoch(metrics, "valid_")
 

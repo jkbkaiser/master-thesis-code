@@ -1,0 +1,25 @@
+#!/bin/bash
+
+#SBATCH --partition=gpu_mig
+#SBATCH --gpus=1
+#SBATCH --job-name=TrainBaselines
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=9
+#SBATCH --time=03:00:00
+#SBATCH --output=./logs/job_outputs/slurm_output_%A.out
+
+module purge
+module load 2024
+
+source .env
+source .venv/bin/activate
+
+python -m src.experiments.gbif_baselines.train \
+    -d gbif_genus_species_100k \
+    -m hac \
+    -lr 1e-4 \
+    --weight-decay 0.02 \
+    --num-epochs 25 \
+    --batch-size 64 \
+    --reload \
+    --no-freeze-backbone

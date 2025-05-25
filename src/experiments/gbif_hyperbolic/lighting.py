@@ -13,7 +13,7 @@ from src.experiments.gbif_hyperbolic.models.hyperbolic_learned import \
 from src.experiments.gbif_hyperbolic.models.hyperbolic_uniform import \
     HyperbolicUniform
 from src.experiments.gbif_hyperbolic.models.hypersphere import Hyperspherical
-from src.shared.datasets import Dataset, DatasetType, DatasetVersion
+from src.shared.datasets import Dataset, DatasetVersion
 from src.shared.prototypes import get_prototypes
 from src.shared.torch.backbones import (ViTAEv2_B, load_for_transfer_learning,
                                         t2t_vit_t_14)
@@ -78,16 +78,6 @@ def create_model(model_name, model_hparams, ds):
     return model
 
 
-def get_num_classes(ds: Dataset):
-    if ds.type == DatasetType.GENUS_SPECIES:
-        return ds.labelcount_per_level
-    if ds.type == DatasetType.FLAT:
-        total = ds.labelcount_per_level[0]
-        split = ds.metadata["per_level"][0]["split"]
-        return split, total - split
-    raise Exception("could not retrieve num classes")
-
-
 def linear_warmup_cosine_decay(warmup_steps, total_steps):
     def lr_lambda(current_step):
         if current_step < warmup_steps:
@@ -118,7 +108,7 @@ class LightningGBIF(L.LightningModule):
         self.pred_fn = self.model.pred_fn
         self.loss_fn = self.model.loss_fn
 
-        [self.num_classes_genus, self.num_classes_species] = get_num_classes(ds)
+        [self.num_classes_genus, self.num_classes_species] = ds.labelcount_per_level
         self.metric: Metric = Metric(ds, self.num_classes_genus, self.num_classes_species)
 
     def log_epoch(self, value, name=None):

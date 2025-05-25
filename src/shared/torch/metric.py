@@ -1,7 +1,6 @@
 import torch
 
 from src.constants import DEVICE
-from src.shared.datasets import DatasetType
 
 
 class Metric():
@@ -9,15 +8,8 @@ class Metric():
         self.ds = ds
         self.num_genus = num_genus
         self.num_species = num_species
-
-        if self.ds.type == DatasetType.FLAT:
-            self.split = self.ds.metadata["per_level"][0]["split"]
-            freq = self.ds.frequencies[0][self.split:]
-        else:
-            freq = self.ds.frequencies[1]
-
+        freq = self.ds.frequencies[1]
         self.freq = freq.to(DEVICE)
-
         self.reset()
 
     def reset(self):
@@ -46,10 +38,6 @@ class Metric():
         return batch_metrics
 
     def compute_valid_conf_m(self, species_preds, species_labels):
-        if self.ds.type == DatasetType.FLAT:
-            species_preds = species_preds - self.ds.split
-            species_labels = species_labels - self.ds.split
-
         self.valid_conf_m.index_add_(
             0,
             species_labels.view(-1),
@@ -62,7 +50,7 @@ class Metric():
         with torch.no_grad():
             max_k = max(topk)
             _, pred = species_logits.topk(max_k, dim=1, largest=True, sorted=True)  # (B, max_k)
-            pred = pred.t()  # (max_k, B)
+            pred = pred.t()
             correct = pred.eq(species_labels.view(1, -1).expand_as(pred))  # (max_k, B)
 
             res = {}

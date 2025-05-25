@@ -8,17 +8,14 @@ from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import MLFlowLogger
 
 from src.experiments.gbif_baselines.lighting import LightningGBIF
-from src.shared.datasets import Dataset, DatasetType, DatasetVersion
+from src.shared.datasets import Dataset, DatasetVersion
 
 load_dotenv()
 MLFLOW_SERVER = os.environ["MLFLOW_SERVER"]
 CHECKPOINT_DIR = os.environ["CHECKPOINT_DIR"]
 
 def get_model_architecture(model, ds: Dataset):
-    if model == "plc" or model == "mplc" or model == "hac":
-        return ds.labelcount_per_level
-    if model == "marg":
-        return ds.labelcount_per_level[-1]
+    return ds.labelcount_per_level
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -111,9 +108,6 @@ def run(args):
         "architecture": architecture,
         "freeze_backbone": args.freeze_backbone,
     }
-
-    if ds.type == DatasetType.FLAT:
-        model_hparams.update({"split": ds.split})
 
     optim_hparams = {"lr": args.learning_rate, "weight_decay": args.weight_decay}
 
