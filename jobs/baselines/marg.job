@@ -2,7 +2,7 @@
 
 #SBATCH --partition=gpu_mig
 #SBATCH --gpus=1
-#SBATCH --job-name=TrainBaselines
+#SBATCH --job-name=MARG
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=9
 #SBATCH --time=03:00:00
