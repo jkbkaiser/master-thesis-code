@@ -11,9 +11,9 @@ class MARG(nn.Module):
 
         if backbone is not None:
             self.model = backbone
-            self.model.head = nn.Linear(out_features, architecture)
+            self.model.head = nn.Linear(out_features, architecture[-1])
         else:
-            self.model = nn.Linear(out_features, architecture)
+            self.model = nn.Linear(out_features, architecture[-1])
 
         self.criterion = nn.CrossEntropyLoss()
         self.species2genus = torch.tensor(ds.hierarchy[0].T, device=DEVICE).argmax(dim=1)

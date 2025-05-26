@@ -81,6 +81,14 @@ def parse_args():
     parser.add_argument("--seed", default=42, required=False, type=int)
     parser.add_argument("--reload", action="store_true", default=False, required=False)
 
+    parser.add_argument(
+        "--show-progress-bar",
+        dest="progress_bar",
+        action="store_true",
+        help="Show progress bar"
+    )
+
+
     return parser.parse_args()
 
 
@@ -142,7 +150,7 @@ def run(args):
         logger=mlf_logger,
         callbacks=[early_stop_callback, checkpoint_callback],
         profiler="simple",
-        enable_progress_bar=True,
+        enable_progress_bar=args.progress_bar,
     )
 
     logging.getLogger("lightning.pytorch").setLevel(logging.FATAL)
