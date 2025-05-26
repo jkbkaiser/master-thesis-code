@@ -143,6 +143,8 @@ class LightningGBIF(L.LightningModule):
         self.log_epoch(metrics, "valid_")
 
     def on_validation_epoch_end(self):
-        recall = self.metric.compute_recall()
+        recall_species = self.metric.compute_recall(self.metric.valid_conf_m_species, self.metric.species_freq)
+        recall_genus = self.metric.compute_recall(self.metric.valid_conf_m_genus, self.metric.genus_freq)
 
-        self.log_epoch(recall, "valid_recall_")
+        self.log_epoch(recall_species, "valid_recall_species_")
+        self.log_epoch(recall_genus, "valid_recall_genus_")
