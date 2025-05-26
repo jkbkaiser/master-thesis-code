@@ -80,6 +80,7 @@ def parse_args():
     parser.add_argument("--eval-every", default=2, required=False, type=int)
     parser.add_argument("--seed", default=42, required=False, type=int)
     parser.add_argument("--reload", action="store_true", default=False, required=False)
+    parser.add_argument("--mplc-warmup", default=10, required=False, type=int)
 
     parser.add_argument(
         "--show-progress-bar",
@@ -103,6 +104,7 @@ def run(args):
         log_model=True,
     )
 
+
     general_hparams = {
         "model_name": args.model,
         "optim_name": args.optimizer,
@@ -116,6 +118,9 @@ def run(args):
         "architecture": architecture,
         "freeze_backbone": args.freeze_backbone,
     }
+
+    if args.model == "mplc":
+        model_hparams.update({"warmup": args.mplc_warmup})
 
     optim_hparams = {"lr": args.learning_rate, "weight_decay": args.weight_decay}
 

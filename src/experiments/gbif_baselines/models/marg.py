@@ -21,11 +21,11 @@ class MARG(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-    def pred_fn(self, logits):
+    def pred_fn(self, logits, *args, **kwargs):
         species_probs = F.softmax(logits, dim=1)
         species_preds = species_probs.argmax(dim=1)
         genus_preds = self.species2genus[species_preds]
         return genus_preds, species_preds
 
-    def loss_fn(self, logits, _, species_labels):
+    def loss_fn(self, logits, _, species_labels, *args, **kwargs):
         return self.criterion(logits, species_labels)

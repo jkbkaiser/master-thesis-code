@@ -32,11 +32,11 @@ class PLC(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-    def pred_fn(self, logits):
+    def pred_fn(self, logits, *args, **kwargs):
         [genus_logits, species_logits] = logits
         return genus_logits.argmax(dim=1), species_logits.argmax(dim=1)
 
-    def loss_fn(self, logits, genus_labels, species_labels):
+    def loss_fn(self, logits, genus_labels, species_labels, *args, **kwargs):
         [genus_logits, species_logits] = logits
         genus_loss = self.criterion(genus_logits, genus_labels)
         species_loss = self.criterion(species_logits, species_labels)

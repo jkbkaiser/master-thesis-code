@@ -112,9 +112,9 @@ class LightningGBIF(L.LightningModule):
 
         imgs, genus_labels, species_labels = batch
         logits = self(imgs)
-        loss = self.loss_fn(logits, genus_labels, species_labels)
+        loss = self.loss_fn(logits, genus_labels, species_labels, epoch=self.current_epoch)
 
-        genus_preds, species_preds = self.pred_fn(logits)
+        genus_preds, species_preds = self.pred_fn(logits, epoch=self.current_epoch)
 
         if len(logits) == 2:
             species_logits = logits[1]
@@ -131,7 +131,7 @@ class LightningGBIF(L.LightningModule):
     def validation_step(self, batch):
         imgs, genus_labels, species_labels = batch
         logits = self(imgs)
-        genus_preds, species_preds = self.pred_fn(logits)
+        genus_preds, species_preds = self.pred_fn(logits, epoch=self.current_epoch)
 
         if len(logits) == 2:
             species_logits = logits[1]
