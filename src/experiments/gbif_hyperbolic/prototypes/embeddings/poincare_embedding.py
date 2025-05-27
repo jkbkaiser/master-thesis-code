@@ -68,18 +68,24 @@ class PoincareEmbedding(BaseEmbedding):
         for epoch in range(epochs):
             # Scale learning rate during burn-in
             if epoch < burn_in_epochs:
-                optimizer.param_groups[0]["lr"] = lr * burn_in_lr_mult
-            else:
+                lr_scale = burn_in_lr_mult + (1.0 - burn_in_lr_mult) * (epoch / burn_in_epochs)
+                optimizer.param_groups[0]["lr"] = lr * lr_scale
+            elif epoch == burn_in_epochs:
                 optimizer.param_groups[0]["lr"] = lr
+            else:
+                if scheduler is not None:
+                    scheduler.step()
 
             avg_loss = 0
 
             for idx, batch in enumerate(dataloader):
                 edges = batch["edges"].to(self.weight.device)
                 edge_label_targets = batch["edge_label_targets"].to(self.weight.device)
+
                 optimizer.zero_grad()
 
                 dists = self(edges=edges)
+
                 loss = poincare_embeddings_loss(dists=dists, targets=edge_label_targets)
                 loss.backward()
                 optimizer.step()
@@ -89,13 +95,12 @@ class PoincareEmbedding(BaseEmbedding):
 
                 avg_loss += loss.item()
 
-            print(f"Epoch {epoch + 1}:  {loss}")
+            plr = optimizer.param_groups[0]["lr"]
+            print(f"Epoch {epoch + 1}:  {loss} lr: {plr}")
 
             if store_intermediate_weights:
                 weights.append(self.weight.clone().detach())
 
-            if scheduler is not None:
-                scheduler.step(epoch=epoch + 1)
 
         return (
             losses if store_losses else None,

@@ -16,8 +16,8 @@ class BaseEmbedding(nn.Module):
         self.ball = ball
 
         self.weight = ManifoldParameter(
-            data=ManifoldTensor(num_embeddings, embedding_dim, manifold=ball)
-        ).to(DEVICE)
+            data=ManifoldTensor(num_embeddings, embedding_dim, manifold=ball).to(DEVICE)
+        )
 
         self.reset_embeddings()
 

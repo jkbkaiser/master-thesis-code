@@ -18,6 +18,8 @@ from geoopt.optim import RiemannianSGD
 from torch.utils.data import DataLoader, dataloader
 
 from src.constants import CACHE_DIR, DEVICE, GOOGLE_BUCKET_URL
+from src.experiments.gbif_hyperbolic.prototypes.embeddings.distortion_embedding import \
+    DistortionEmbedding
 from src.experiments.gbif_hyperbolic.prototypes.embeddings.poincare_embedding import \
     PoincareEmbedding
 from src.experiments.gbif_hyperbolic.prototypes.utils.hierarchy_embedding_dataset import \
@@ -141,7 +143,7 @@ def run(args):
     )
 
     ball = PoincareBallExact(c=1.0)
-    model = PoincareEmbedding(
+    model = DistortionEmbedding(
         num_embeddings=len(id2lable) + 1,
         embedding_dim=args.dims,
         ball=ball,
@@ -176,7 +178,7 @@ def run(args):
 
     print(f"Elapsed training time: {time.time() - start:.3f} seconds")
 
-    base = Path("./prototypes/gbif_genus_species_100k/genus_species_poincare")
+    base = Path("./prototypes/gbif_genus_species_100k/distortion")
 
     if not base.is_dir():
         base.mkdir(parents=True)

@@ -26,7 +26,7 @@ def get_hierarchy(dataset_version, reload: bool = False):
 
 # Load data
 hierarchy = get_hierarchy(DatasetVersion.GBIF_GENUS_SPECIES_100K.value)
-prototypes = np.load("./prototypes/gbif_genus_species_100k/species_hypersphere/2.npy")
+prototypes = np.load("./prototypes/gbif_genus_species_100k/genus_species_poincare/2.npy")
 
 # Choose 10 random genus indices
 num_genus = hierarchy.shape[0]

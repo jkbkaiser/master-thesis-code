@@ -43,7 +43,7 @@ def create_model(model_name, model_hparams, ds):
     prototypes = get_prototypes(model_hparams["prototypes"], ds.version.value, model_hparams["prototype_dim"])
     model_hparams["prototypes"] = prototypes
 
-    if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS, DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS]:
+    if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS]:
         out_features = 384
         backbone = None
     else:
@@ -64,7 +64,7 @@ def create_model(model_name, model_hparams, ds):
     cls = MODEL_DICT[model_name]
     model = cls(backbone, out_features, **model_hparams, ds=ds)
 
-    if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS, DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS]:
+    if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS]:
         pass
     else:
         if model_hparams["freeze_backbone"]:
@@ -138,7 +138,6 @@ class LightningGBIF(L.LightningModule):
         imgs, genus_labels, species_labels = batch
         logits = self(imgs)
         loss = self.loss_fn(logits, genus_labels, species_labels)
-
         preds = self.pred_fn(logits)
 
         if len(preds) == 2:
@@ -148,7 +147,6 @@ class LightningGBIF(L.LightningModule):
             species_preds = preds
             genus_preds = torch.zeros_like(genus_labels)
             metrics = self.metric.process_train_batch(genus_preds, genus_labels, logits, species_preds, species_labels)
-
 
         self.log_epoch(loss, "train_loss")
         self.log_epoch(metrics, "train_")
@@ -176,6 +174,8 @@ class LightningGBIF(L.LightningModule):
         self.log_epoch(metrics, "valid_")
 
     def on_validation_epoch_end(self):
-        recall = self.metric.compute_recall()
+        recall_species = self.metric.compute_recall(self.metric.valid_conf_m_species, self.metric.species_freq)
+        recall_genus = self.metric.compute_recall(self.metric.valid_conf_m_genus, self.metric.genus_freq)
 
-        self.log_epoch(recall, "valid_recall_")
+        self.log_epoch(recall_species, "valid_recall_species_")
+        self.log_epoch(recall_genus, "valid_recall_genus_")

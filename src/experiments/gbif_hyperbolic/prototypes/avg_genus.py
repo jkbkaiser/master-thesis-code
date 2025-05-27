@@ -94,7 +94,7 @@ def run(args):
 
     final_prototypes = compute_genus_prototypes(prototypes, genus_species_matrix.cpu())
 
-    base = Path("./prototypes/gbif_genus_species_100k/species_hypersphere")
+    base = Path("./prototypes/gbif_genus_species_100k/avg_genus")
     f = base / f"{args.dims}.npy"
     np.save(f, final_prototypes.numpy())
     print(f"saved to {f}")

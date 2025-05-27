@@ -57,7 +57,6 @@ class Metric():
             ].to(torch.int64),
         )
 
-
     def topk_accuracy(self, species_logits, species_labels, topk=(5,)):
         with torch.no_grad():
             max_k = max(topk)

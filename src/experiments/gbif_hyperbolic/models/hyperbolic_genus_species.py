@@ -49,8 +49,7 @@ class GenusSpeciesPoincare(nn.Module):
         self.ball = geoopt.PoincareBallExact(c=c)
 
         self.prototypes = (prototypes * 0.95) / c
-        # self.prototypes = self.prototypes[1:] # Don't use the root node
-        # print(self.prototypes.shape)
+        self.prototypes = self.prototypes[1:] # Don't use the root node
 
         [self.num_genus, self.num_species] = architecture
         self.genus_prototypes = self.prototypes[:self.num_genus]
