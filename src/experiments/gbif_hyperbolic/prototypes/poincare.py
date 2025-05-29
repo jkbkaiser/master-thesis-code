@@ -141,14 +141,14 @@ def run(args):
         shuffle=True,
     )
 
-    ball = PoincareBallExact(c=1.0)
+    ball = PoincareBallExact(c=3.0)
     model = PoincareEmbedding(
         num_embeddings=len(id2lable) + 1,
         embedding_dim=args.dims,
         ball=ball,
     )
 
-    lr = 5e-1
+    lr = 0.1
     burn_in_lr_mult = 1 / 10
     epochs = 100
     burn_in_epochs = 10

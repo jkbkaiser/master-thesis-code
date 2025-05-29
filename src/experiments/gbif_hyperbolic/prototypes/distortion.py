@@ -142,14 +142,14 @@ def run(args):
         shuffle=True,
     )
 
-    ball = PoincareBallExact(c=1.0)
+    ball = PoincareBallExact(c=3.0)
     model = DistortionEmbedding(
         num_embeddings=len(id2lable) + 1,
         embedding_dim=args.dims,
         ball=ball,
     )
 
-    lr = 1e0
+    lr = 5e-1
     burn_in_lr_mult = 1 / 10
     epochs = 50
     burn_in_epochs = 10

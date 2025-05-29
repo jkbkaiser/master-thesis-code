@@ -72,9 +72,6 @@ class PoincareEmbedding(BaseEmbedding):
                 optimizer.param_groups[0]["lr"] = lr * lr_scale
             elif epoch == burn_in_epochs:
                 optimizer.param_groups[0]["lr"] = lr
-            else:
-                if scheduler is not None:
-                    scheduler.step()
 
             avg_loss = 0
 
@@ -94,6 +91,10 @@ class PoincareEmbedding(BaseEmbedding):
                     losses.append(loss.item())
 
                 avg_loss += loss.item()
+
+            if epoch > burn_in_epochs:
+                if scheduler is not None:
+                    scheduler.step()
 
             plr = optimizer.param_groups[0]["lr"]
             print(f"Epoch {epoch + 1}:  {loss} lr: {plr}")

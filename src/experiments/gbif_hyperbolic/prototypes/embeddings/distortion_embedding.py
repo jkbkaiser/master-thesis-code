@@ -1,8 +1,9 @@
 import torch
 from geoopt.manifolds import PoincareBallExact
+from geoopt.optim import RiemannianSGD
 from geoopt.tensor import ManifoldParameter
 from torch.optim import Optimizer
-from torch.optim.lr_scheduler import LRScheduler
+from torch.optim.lr_scheduler import CosineAnnealingLR, LRScheduler
 from torch.utils.data import DataLoader
 
 from .base import BaseEmbedding
@@ -15,6 +16,8 @@ def distortion_loss(
     embeddings: torch.Tensor, dist_targets: torch.Tensor, ball: PoincareBallExact, epoch:int, max_epoch:int
 ) -> torch.Tensor:
     embedding_dists = ball.dist(x=embeddings[:, :, 0, :], y=embeddings[:, :, 1, :])
+    print(embedding_dists)
+    print(dist_targets)
     dist_loss = (embedding_dists - dist_targets).abs() / dist_targets 
 
     norm_loss = compute_norm_loss(embeddings, dist_targets, ball, epoch, max_epoch)
@@ -72,8 +75,8 @@ class DistortionEmbedding(BaseEmbedding):
         epochs: int,
         optimizer: Optimizer,
         scheduler: LRScheduler = None,
-        pretrain_epochs: int = 100,
-        pretrain_lr: float = 5.0,
+        pretrain_epochs: int = 0,
+        pretrain_lr: float = 5e-1,
         burn_in_epochs: int = 10,
         burn_in_lr_mult: float = 0.1,
         store_losses: bool = False,
@@ -87,13 +90,14 @@ class DistortionEmbedding(BaseEmbedding):
             ball=self.ball,
         )
 
-        # Copy the optimizer, but change the parameters to the Poincare embeddings model weights
-        pretraining_optimizer = clone_one_group_optimizer(
-            optimizer=optimizer,
-            new_params=poincare_embeddings.parameters(),
+        pretraining_optimizer = RiemannianSGD(
+            params=poincare_embeddings.parameters(),
             lr=pretrain_lr,
             momentum=0.9,
-            weight_decay=0.005,
+            dampening=0,
+            weight_decay=0.0005,
+            nesterov=True,
+            stabilize=500
         )
 
         # TODO: properly copy scheduler instead of ignoring scheduler for pretraining
@@ -103,13 +107,15 @@ class DistortionEmbedding(BaseEmbedding):
             dataloader=dataloader,
             epochs=pretrain_epochs,
             optimizer=pretraining_optimizer,
-            scheduler=None,
+            scheduler=CosineAnnealingLR(pretraining_optimizer, T_max=pretrain_epochs, eta_min=1e-2),
             burn_in_epochs=burn_in_epochs,
             burn_in_lr_mult=burn_in_lr_mult,
             store_losses=store_losses,
             store_intermediate_weights=store_intermediate_weights,
             **kwargs
         )
+
+        print("FINISHED PRETRAINING")
 
         # Copy pretrained embeddings, rescale and clip these and reset optimizer param group
         with torch.no_grad():
