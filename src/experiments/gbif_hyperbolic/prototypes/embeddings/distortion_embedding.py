@@ -1,3 +1,6 @@
+from typing import Optional
+
+import mlflow
 import torch
 from geoopt.manifolds import PoincareBallExact
 from geoopt.optim import RiemannianSGD
@@ -16,28 +19,24 @@ def distortion_loss(
     embeddings: torch.Tensor, dist_targets: torch.Tensor, ball: PoincareBallExact, epoch:int, max_epoch:int
 ) -> torch.Tensor:
     embedding_dists = ball.dist(x=embeddings[:, :, 0, :], y=embeddings[:, :, 1, :])
-    print(embedding_dists)
-    print(dist_targets)
-    dist_loss = (embedding_dists - dist_targets).abs() / dist_targets 
-
+    mask = dist_targets != 0
+    dist_loss = ((embedding_dists - dist_targets).abs() / (dist_targets + 1e-8))[mask]
     norm_loss = compute_norm_loss(embeddings, dist_targets, ball, epoch, max_epoch)
-
-    if dist_loss.isnan().any():
-        print("break")
-
+    # print("l", dist_loss.mean(), norm_loss.mean())
     return dist_loss.mean() + 0.01 * norm_loss.mean()
 
 
 def compute_norm_loss(
-        embeddings: torch.Tensor, dist_targets: torch.Tensor, ball: PoincareBallExact, epoch:int, max_epoch:int
-        ) -> torch.Tensor:
-    # tangent_vecs = ball.logmap0(embeddings)
+    embeddings: torch.Tensor,
+    dist_targets: torch.Tensor,
+    ball: PoincareBallExact,
+    epoch:int,
+    max_epoch:int
+) -> torch.Tensor:
     embedding_norm = ball.dist0(embeddings,keepdim=True) 
-    # embedding_norm = ball.norm(embeddings,tangent_vecs,keepdim=True) 
     unique_even_dists = torch.unique(dist_targets[dist_targets % 2 == 0])
     all_even_embedding_norms = [embedding_norm[dist_targets == i] for i in unique_even_dists]
     mean_even_embedding_norms = [norm.mean() for norm in all_even_embedding_norms]
-    # print(mean_even_embedding_norms)
     even_embedding_loss = torch.cat([(even_embedding_norms - mean_even_embedding_norms) for even_embedding_norms, mean_even_embedding_norms in zip(all_even_embedding_norms, mean_even_embedding_norms)])
     return (epoch/max_epoch) * even_embedding_loss.abs()
 
@@ -52,8 +51,8 @@ class DistortionEmbedding(BaseEmbedding):
             ball=ball,
         )
 
-    def forward(self, edges: torch.Tensor) -> torch.Tensor:
-        embeddings = super(DistortionEmbedding, self).forward(edges)
+    def forward(self, labels: torch.Tensor) -> torch.Tensor:
+        embeddings = super(DistortionEmbedding, self).forward(labels)
         return embeddings
 
     def score(self, edges: torch.Tensor, alpha: float = 1) -> torch.Tensor:
@@ -69,20 +68,25 @@ class DistortionEmbedding(BaseEmbedding):
             1 + alpha * (embedding_norms[:, :, 0] - embedding_norms[:, :, 1])
         ) * edge_distances
 
-    def train(
+    def train_model(
         self,
         dataloader: DataLoader,
         epochs: int,
         optimizer: Optimizer,
-        scheduler: LRScheduler = None,
-        pretrain_epochs: int = 0,
-        pretrain_lr: float = 5e-1,
+        scheduler: Optional[LRScheduler] = None,
+        pretrain_epochs: int = 50,
+        pretrain_lr: float = 0.1,
         burn_in_epochs: int = 10,
         burn_in_lr_mult: float = 0.1,
-        store_losses: bool = False,
-        store_intermediate_weights: bool = False,
         **kwargs
-    ) -> None:
+    ):
+        mlflow.log_params({
+            "pretrain_epochs": pretrain_epochs,
+            "pretrain_lr": pretrain_lr,
+            "pretrain_scheduler": "consine annealing",
+            "pretrain_scheduler_min": 1e-2,
+        })
+
         # Initialize a Poincare embeddings model for pretraining
         poincare_embeddings = PoincareEmbedding(
             num_embeddings=self.num_embeddings,
@@ -100,22 +104,19 @@ class DistortionEmbedding(BaseEmbedding):
             stabilize=500
         )
 
-        # TODO: properly copy scheduler instead of ignoring scheduler for pretraining
-
         # Perform pretraining
-        losses, weights = poincare_embeddings.train(
+        poincare_embeddings.train_model(
             dataloader=dataloader,
             epochs=pretrain_epochs,
             optimizer=pretraining_optimizer,
             scheduler=CosineAnnealingLR(pretraining_optimizer, T_max=pretrain_epochs, eta_min=1e-2),
             burn_in_epochs=burn_in_epochs,
             burn_in_lr_mult=burn_in_lr_mult,
-            store_losses=store_losses,
-            store_intermediate_weights=store_intermediate_weights,
-            **kwargs
         )
 
         print("FINISHED PRETRAINING")
+
+        torch.autograd.set_detect_anomaly(True)
 
         # Copy pretrained embeddings, rescale and clip these and reset optimizer param group
         with torch.no_grad():
@@ -126,16 +127,15 @@ class DistortionEmbedding(BaseEmbedding):
                 optimizer=optimizer,
                 new_params=self.parameters(),
             )
-            print(optimizer)
 
         for epoch in range(epochs):
-            for idx, batch in enumerate(dataloader):
+            avg_loss = 0
+
+            for batch in dataloader:
                 edges = batch["edges"].to(self.weight.device)
                 dist_targets = batch["dist_targets"].to(self.weight.device)
-
                 optimizer.zero_grad()
-
-                embeddings = self(edges=edges)
+                embeddings = self(edges)
 
                 loss = distortion_loss(
                     embeddings=embeddings,
@@ -147,25 +147,28 @@ class DistortionEmbedding(BaseEmbedding):
 
                 loss.backward()
                 optimizer.step()
+                avg_loss += loss.item()
 
-                if not (epoch + 1) % 20:
-                    print(f"Epoch {epoch + 1}, batch {idx + 1}/{len(dataloader)}:  {loss}")
-                    if store_intermediate_weights:
-                        weights.append(self.weight.clone().detach())
+            plr = optimizer.param_groups[0]["lr"]
+            print(f"Epoch {epoch + 1}:  {avg_loss/len(dataloader)}, lr: {plr}")
 
-                if store_losses:
-                    losses.append(loss.item())
 
-            if store_intermediate_weights:
-                weights.append(self.weight.clone().detach())
+            norms = self.weight.norm(dim=1)
+
+            mean_norm = norms.mean().item()
+            max_norm = norms.max().item()
+            min_norm = norms.min().item()
+
+            mlflow.log_metrics({
+                "distortion_loss": avg_loss / len(dataloader),
+                "distortion_lr": plr,
+                "distortion_mean_norm": mean_norm,
+                "distortion_max_norm": max_norm,
+                "distortion_min_norm": min_norm,
+            }, step=epoch)
 
             if scheduler is not None:
                 scheduler.step(epoch=epoch + 1)
-
-        return (
-            losses if store_losses else None,
-            weights if store_intermediate_weights else None,
-        )
 
     def evaluate_edge_predictions(
         self,

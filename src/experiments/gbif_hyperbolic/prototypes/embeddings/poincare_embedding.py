@@ -1,3 +1,6 @@
+from typing import Optional
+
+import mlflow
 import torch
 from geoopt.manifolds import PoincareBallExact
 from torch.optim import Optimizer
@@ -16,6 +19,38 @@ def poincare_embeddings_loss(
     loss = (numerator / denominator).log().mean().neg()
     return loss
 
+
+# def poincare_repulsion_loss(prototypes, ball, temperature=0.1):
+#     d = ball.dist(prototypes.unsqueeze(0), prototypes.unsqueeze(1))  # [N, N]
+#     mask = ~torch.eye(prototypes.shape[0], dtype=torch.bool, device=prototypes.device)
+#     dists = d[mask]
+#     return torch.exp(-dists / temperature).mean()
+
+def prototype_loss(prototypes):
+    normed = torch.nn.functional.normalize(prototypes, dim=1)
+    # Dot product of normalized prototypes is cosine similarity.
+    product = torch.matmul(normed, normed.t()) + 1
+    # Remove diagnonal from loss.
+    product -= 2. * torch.diag(torch.diag(product))
+    # Minimize maximum cosine similarity.
+    loss = product.max(dim=1)[0]
+    return loss.mean()
+
+# def repulsion_loss(embeddings: torch.Tensor, temperature: float = 0.1) -> torch.Tensor:
+#     """
+#     Penalizes high cosine similarity between different embeddings.
+#     Intended to encourage spread-out representations.
+#     """
+#     # Normalize embeddings to unit vectors
+#     normed = torch.nn.functional.normalize(embeddings, dim=1)
+#     sim_matrix = torch.matmul(normed, normed.T)  # shape [N, N]
+#
+#     # Mask self-similarity
+#     sim_matrix.fill_diagonal_(float("-inf"))
+#
+#     # Softmax-based repulsion loss: encourage uniform spread
+#     repulsion = torch.logsumexp(sim_matrix / temperature, dim=1)
+#     return repulsion.mean()
 
 class PoincareEmbedding(BaseEmbedding):
     def __init__(
@@ -45,25 +80,17 @@ class PoincareEmbedding(BaseEmbedding):
             1 + alpha * (embedding_norms[:, :, 0] - embedding_norms[:, :, 1])
         ) * edge_distances
 
-    def train(
+    def train_model(
         self,
         dataloader: DataLoader,
         epochs: int,
         optimizer: Optimizer,
-        scheduler: LRScheduler = None,
+        scheduler: Optional[LRScheduler] = None,
         burn_in_epochs: int = 10,
         burn_in_lr_mult: float = 0.1,
-        store_losses: bool = False,
-        store_intermediate_weights: bool = False,
-        **kwargs
     ):
         # Store initial learning rate
         lr = optimizer.param_groups[0]["lr"]
-
-        if store_losses:
-            losses = []
-        if store_intermediate_weights:
-            weights = [self.weight.clone().detach()]
 
         for epoch in range(epochs):
             # Scale learning rate during burn-in
@@ -74,8 +101,10 @@ class PoincareEmbedding(BaseEmbedding):
                 optimizer.param_groups[0]["lr"] = lr
 
             avg_loss = 0
+            avg_repulsion_loss = 0
+            avg_poincare_loss = 0
 
-            for idx, batch in enumerate(dataloader):
+            for batch in dataloader:
                 edges = batch["edges"].to(self.weight.device)
                 edge_label_targets = batch["edge_label_targets"].to(self.weight.device)
 
@@ -83,27 +112,41 @@ class PoincareEmbedding(BaseEmbedding):
 
                 dists = self(edges=edges)
 
-                loss = poincare_embeddings_loss(dists=dists, targets=edge_label_targets)
+                poincare_loss = poincare_embeddings_loss(dists=dists, targets=edge_label_targets)
+
+                repulsion_l = prototype_loss(self.weight)
+
+                loss = repulsion_l + poincare_loss
+
                 loss.backward()
                 optimizer.step()
-
-                if store_losses:
-                    losses.append(loss.item())
-
                 avg_loss += loss.item()
+                avg_repulsion_loss += repulsion_l.item()
+                avg_poincare_loss += poincare_loss.item()
+
+                with torch.no_grad():
+                    self.weight.data = self.ball.projx(self.weight.data)
 
             if epoch > burn_in_epochs:
                 if scheduler is not None:
                     scheduler.step()
 
             plr = optimizer.param_groups[0]["lr"]
-            print(f"Epoch {epoch + 1}:  {loss} lr: {plr}")
 
-            if store_intermediate_weights:
-                weights.append(self.weight.clone().detach())
+            print(f"Epoch {epoch + 1}:  {avg_loss/len(dataloader)} lr: {plr}")
 
+            norms = self.weight.norm(dim=1)
 
-        return (
-            losses if store_losses else None,
-            weights if store_intermediate_weights else None,
-        )
+            mean_norm = norms.mean().item()
+            max_norm = norms.max().item()
+            min_norm = norms.min().item()
+
+            mlflow.log_metrics({
+                "total_loss": avg_loss / len(dataloader),
+                "repulsion_loss": avg_repulsion_loss / len(dataloader),
+                "poincare_loss": avg_poincare_loss / len(dataloader),
+                "poincare_lr": plr,
+                "poincare_mean_norm": mean_norm,
+                "poincare_max_norm": max_norm,
+                "poincare_min_norm": min_norm,
+            }, step=epoch)

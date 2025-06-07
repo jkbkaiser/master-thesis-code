@@ -33,7 +33,7 @@ num_genus = hierarchy.shape[0]
 num_species = hierarchy.shape[1]
 
 t = hierarchy.sum(axis=1)
-chosen_genus_indices = (-t).argsort()[:3]
+chosen_genus_indices = (-t).argsort()[:5]
 
 # Setup plot
 fig, ax = plt.subplots(figsize=(8, 8))

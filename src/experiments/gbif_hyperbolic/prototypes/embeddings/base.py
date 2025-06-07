@@ -30,7 +30,3 @@ class BaseEmbedding(nn.Module):
 
     def forward(self, labels: torch.Tensor) -> torch.Tensor:
         return self.weight[labels]
-
-    def score(self, edges: torch.Tensor, **kwargs) -> torch.Tensor:
-        raise NotImplementedError
-

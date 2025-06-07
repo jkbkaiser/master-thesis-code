@@ -3,6 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import mlflow
 import pandas as pd
+import seaborn as sns
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -16,8 +17,7 @@ experiment = mlflow.get_experiment_by_name(experiment_name)
 if experiment is None:
     raise ValueError(f"Experiment '{experiment_name}' not found.")
 
-# List the run names or IDs you want to compare
-# You can use run IDs, or if you prefer to filter by tag/name, adjust the logic below
+# List of run IDs to compare
 run_ids_to_compare = [
     "86fab3a2574843c592a9e3e783452ca4",
     "423d8e5d629f4ef0acc5fdd2b6b1c013",
@@ -25,53 +25,52 @@ run_ids_to_compare = [
     "8115459ea38545378430c491c8de53dd"
 ]
 
-# Frequencies to evaluate
 frequencies = ["10", "50", "100", "all"]
 metric_prefix = "valid_recall_species_support_weighted_recall"
 
-# Collect metrics for each run
-results = []
-
+records = []
 for run_id in run_ids_to_compare:
     try:
         run = mlflow.get_run(run_id)
-        row = {
-            "Run ID": run_id,
-            "Run Name": run.data.tags.get("mlflow.runName", run_id)  # fallback to ID if no name
-        }
+        run_name = run.data.tags.get("mlflow.runName", run_id)
+        model_name = run.data.params.get("model_name", "unknown")
+
         for freq in frequencies:
             metric_key = f"{metric_prefix}_{freq}"
-            value = run.data.metrics.get(metric_key, None)
-            row[freq] = value
-        results.append(row)
+            value = run.data.metrics.get(metric_key)
+            if value is not None:
+                records.append({
+                    "Run Name": run_name,
+                    "Model Name": model_name.upper(),
+                    "Frequency": freq,
+                    "Recall": value
+                })
     except Exception as e:
         print(f"Failed to retrieve run {run_id}: {e}")
 
-# Convert to DataFrame
-df = pd.DataFrame(results)
+# Create DataFrame for seaborn
+df = pd.DataFrame(records)
 
-# Plotting
-fig, ax = plt.subplots(figsize=(10, 6))
-bar_width = 0.2
-x = range(len(frequencies))
+# Plot with Seaborn
+sns.set(style="whitegrid", font_scale=1.1)
+plt.figure(figsize=(10, 6))
 
-for i, row in df.iterrows():
-    values = [row[freq] for freq in frequencies]
-    ax.bar(
-        [p + i * bar_width for p in x],
-        values,
-        width=bar_width,
-        label=row["Run Name"]
-    )
+ax = sns.barplot(
+    data=df,
+    x="Frequency",
+    y="Recall",
+    hue="Model Name",
+    palette="deep",
+    edgecolor="black"
+)
+sns.despine(top=True, right=False, left=True, bottom=False)
 
-# Axis formatting
-ax.set_xlabel("Frequency Threshold")
+# Titles and layout
+# ax.set_title("Macro Recall per Frequency Threshold by Run", fontsize=20)
 ax.set_ylabel("Macro Recall")
-ax.set_title("Macro Recall per Frequency Threshold by Run")
-ax.set_xticks([p + (bar_width * (len(df) - 1)) / 2 for p in x])
-ax.set_xticklabels(frequencies)
-ax.legend()
-
+ax.set_xlabel("Frequency Threshold")
+plt.legend(title="Model", loc="upper left")
 plt.tight_layout()
+plt.savefig("baselines_barchart.png", dpi=600)
 plt.show()
 

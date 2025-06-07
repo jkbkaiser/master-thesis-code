@@ -1,30 +1,30 @@
 import argparse
 import json
 import os
-import time
 import uuid
 from pathlib import Path
 
-import matplotlib.pyplot as plt
+import mlflow
 import networkx as nx
 import numpy as np
 import requests
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
+from dotenv import load_dotenv
 from geoopt import PoincareBallExact
 from geoopt.optim import RiemannianSGD
-from torch.utils.data import DataLoader, dataloader
+from torch.utils.data import DataLoader
 
-from src.constants import CACHE_DIR, DEVICE, GOOGLE_BUCKET_URL
+from src.constants import CACHE_DIR, GOOGLE_BUCKET_URL
 from src.experiments.gbif_hyperbolic.prototypes.embeddings.distortion_embedding import \
     DistortionEmbedding
-from src.experiments.gbif_hyperbolic.prototypes.embeddings.poincare_embedding import \
-    PoincareEmbedding
 from src.experiments.gbif_hyperbolic.prototypes.utils.hierarchy_embedding_dataset import \
     HierarchyEmbeddingDataset
 from src.shared.datasets import DatasetVersion
+
+load_dotenv()
+
+MLFLOW_SERVER = os.environ["MLFLOW_SERVER"]
+CHECKPOINT_DIR = os.environ["CHECKPOINT_DIR"]
 
 
 def build_genus_species_graph(genus_species_matrix, genus_names=None, species_names=None):
@@ -84,6 +84,7 @@ def get_hierarchy(dataset_version, reload: bool = False):
     hierarchy = np.load(path)["data"]
     return hierarchy.squeeze()
 
+
 def get_metadata(dataset_version, reload: bool = False):
     directory = CACHE_DIR / dataset_version
     path = directory / "metadata.json"
@@ -124,8 +125,8 @@ def run(args):
 
     graph = build_genus_species_graph(hierarchy)
 
-    print("Node count:", len(graph.nodes))
-    print(len(id2lable))
+    mlflow.set_tracking_uri(MLFLOW_SERVER)
+    mlflow.set_experiment("prototypes")
 
     dataset = HierarchyEmbeddingDataset(
         hierarchy=graph,
@@ -149,34 +150,44 @@ def run(args):
         ball=ball,
     )
 
-    lr = 5e-1
+    lr = 0.1
     burn_in_lr_mult = 1 / 10
-    epochs = 50
+    epochs = 100
     burn_in_epochs = 10
+    momentum = 0.9
+    weight_decay = 0.0005
 
     optimizer = RiemannianSGD(
         params=model.parameters(),
         lr=lr,
-        momentum=0.9,
+        momentum=momentum,
         dampening=0,
-        weight_decay=0.0005,
+        weight_decay=weight_decay,
         nesterov=True,
         stabilize=500
     )
 
-    # Train the model
-    start = time.time()
+    with mlflow.start_run():
+        mlflow.log_params({
+            "nodes": len(graph.nodes),
+            "type": "distortion",
+            "distortion_lr": lr,
+            "distortion_epochs": epochs,
+            "distortion_burn_in_lr_mult": burn_in_lr_mult,
+            "distortion_burn_in_epochs": burn_in_epochs,
+            "distortion_momentum": momentum,
+            "distortion_weight_decay": weight_decay,
+            "distortion_optimizer": "riemannian sgd"
+        })
 
-    losses, _ = model.train(
-        dataloader=dataloader,
-        epochs=epochs,
-        optimizer=optimizer,
-        burn_in_epochs=burn_in_epochs,
-        burn_in_lr_mult=burn_in_lr_mult,
-        store_losses=True,
-    )
-
-    print(f"Elapsed training time: {time.time() - start:.3f} seconds")
+        model.train_model(
+            dataloader=dataloader,
+            epochs=epochs,
+            optimizer=optimizer,
+            burn_in_epochs=burn_in_epochs,
+            burn_in_lr_mult=burn_in_lr_mult,
+            store_losses=True,
+        )
 
     base = Path("./prototypes/gbif_genus_species_100k/distortion")
 

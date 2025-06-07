@@ -1,29 +1,32 @@
 import argparse
 import json
 import os
-import time
 import uuid
 from pathlib import Path
 
-import matplotlib.pyplot as plt
+import mlflow
 import networkx as nx
 import numpy as np
 import requests
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
+from dotenv import load_dotenv
 from geoopt import PoincareBallExact
 from geoopt.optim import RiemannianSGD
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.utils.data import DataLoader, dataloader
+from torch.utils.data import DataLoader
 
-from src.constants import CACHE_DIR, DEVICE, GOOGLE_BUCKET_URL
+from src.constants import CACHE_DIR, GOOGLE_BUCKET_URL
 from src.experiments.gbif_hyperbolic.prototypes.embeddings.poincare_embedding import \
     PoincareEmbedding
 from src.experiments.gbif_hyperbolic.prototypes.utils.hierarchy_embedding_dataset import \
     HierarchyEmbeddingDataset
 from src.shared.datasets import DatasetVersion
+
+torch.set_float32_matmul_precision("high")
+load_dotenv()
+
+MLFLOW_SERVER = os.environ["MLFLOW_SERVER"]
+CHECKPOINT_DIR = os.environ["CHECKPOINT_DIR"]
 
 
 def build_genus_species_graph(genus_species_matrix, genus_names=None, species_names=None):
@@ -55,16 +58,6 @@ def build_genus_species_graph(genus_species_matrix, genus_names=None, species_na
                 G.add_edge(genus_names[i], species_names[j])
 
     return G
-
-
-def prototype_loss(prototypes):
-    # Dot product of normalized prototypes is cosine similarity.
-    product = torch.matmul(prototypes, prototypes.t()) + 1
-    # Remove diagnonal from loss.
-    product -= 2. * torch.diag(torch.diag(product))
-    # Minimize maximum cosine similarity.
-    loss = product.max(dim=1)[0]
-    return loss.mean(), product.max()
 
 
 def get_hierarchy(dataset_version, reload: bool = False):
@@ -150,35 +143,45 @@ def run(args):
 
     lr = 0.1
     burn_in_lr_mult = 1 / 10
-    epochs = 100
+    epochs = 500
     burn_in_epochs = 10
+    momentum = 0.9
+    weight_decay = 0.0005
+
+    mlflow.set_tracking_uri(MLFLOW_SERVER)
+    mlflow.set_experiment("prototypes")
 
     optimizer = RiemannianSGD(
         params=model.parameters(),
         lr=lr,
-        momentum=0.9,
+        momentum=momentum,
         dampening=0,
-        weight_decay=0.0005,
+        weight_decay=weight_decay,
         nesterov=True,
         stabilize=500
     )
 
-    scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-2)
+    scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-10)
 
-    # Train the model
-    start = time.time()
+    with mlflow.start_run():
+        mlflow.log_params({
+            "nodes": len(graph.nodes),
+            "type": "poincare",
+            "lr": lr,
+            "epochs": epochs,
+            "momentum": momentum,
+            "weight_decay": weight_decay,
+            "scheduler": "cosine annealing"
+        })
 
-    losses, _ = model.train(
-        dataloader=dataloader,
-        epochs=epochs,
-        optimizer=optimizer,
-        burn_in_epochs=burn_in_epochs,
-        burn_in_lr_mult=burn_in_lr_mult,
-        store_losses=True,
-        scheduler=scheduler
-    )
-
-    print(f"Elapsed training time: {time.time() - start:.3f} seconds")
+        model.train_model(
+            dataloader=dataloader,
+            epochs=epochs,
+            optimizer=optimizer,
+            burn_in_epochs=burn_in_epochs,
+            burn_in_lr_mult=burn_in_lr_mult,
+            scheduler=scheduler
+        )
 
     base = Path("./prototypes/gbif_genus_species_100k/genus_species_poincare")
 

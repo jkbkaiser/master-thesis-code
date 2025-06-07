@@ -21,6 +21,8 @@ def prototype_loss(prototypes):
     return loss.mean(), product.max()
 
 
+
+
 def run(args):
     ds = Dataset(args.dataset)
     ds.load(batch_size=args.batch_size, use_torch=True, reload=args.reload)
