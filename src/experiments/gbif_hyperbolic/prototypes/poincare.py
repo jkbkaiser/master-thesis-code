@@ -27,8 +27,6 @@ load_dotenv()
 
 MLFLOW_SERVER = os.environ["MLFLOW_SERVER"]
 CHECKPOINT_DIR = os.environ["CHECKPOINT_DIR"]
-
-
 def build_genus_species_graph(genus_species_matrix, genus_names=None, species_names=None):
     num_genus, num_species = genus_species_matrix.shape
 
@@ -171,7 +169,8 @@ def run(args):
             "epochs": epochs,
             "momentum": momentum,
             "weight_decay": weight_decay,
-            "scheduler": "cosine annealing"
+            "scheduler": "cosine annealing",
+            "dims": args.dims,
         })
 
         model.train_model(

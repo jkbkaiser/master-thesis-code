@@ -1,6 +1,7 @@
 from typing import Optional
 
 import mlflow
+import numpy as np
 import torch
 from geoopt.manifolds import PoincareBallExact
 from torch.optim import Optimizer
@@ -19,22 +20,41 @@ def poincare_embeddings_loss(
     loss = (numerator / denominator).log().mean().neg()
     return loss
 
+# def norms_penalty(prototypes, ball):
+#     n = prototypes.size(0)
+#     idx = torch.randint(0, n, (64,), device=prototypes.device)
+#     sampled = prototypes[idx]
+#     dists = ball.dist0(sampled)
+#     return dists.mean()
 
-# def poincare_repulsion_loss(prototypes, ball, temperature=0.1):
-#     d = ball.dist(prototypes.unsqueeze(0), prototypes.unsqueeze(1))  # [N, N]
-#     mask = ~torch.eye(prototypes.shape[0], dtype=torch.bool, device=prototypes.device)
-#     dists = d[mask]
-#     return torch.exp(-dists / temperature).mean()
+def sampled_poincare_repulsion_loss(points: torch.Tensor, ball: PoincareBallExact, k: int = 64, temperature: float = 0.1) -> torch.Tensor:
+    """
+    Efficient repulsion loss by sampling k points per prototype.
+    """
+    n = points.size(0)
+    device = points.device
 
-def prototype_loss(prototypes):
-    normed = torch.nn.functional.normalize(prototypes, dim=1)
-    # Dot product of normalized prototypes is cosine similarity.
-    product = torch.matmul(normed, normed.t()) + 1
-    # Remove diagnonal from loss.
-    product -= 2. * torch.diag(torch.diag(product))
-    # Minimize maximum cosine similarity.
-    loss = product.max(dim=1)[0]
-    return loss.mean()
+    # Randomly sample k other indices for each point
+    idx = torch.randint(0, n, (n, k), device=device)
+    rows = torch.arange(n, device=device).unsqueeze(1).expand(-1, k)
+
+    a = points[rows.reshape(-1)]  # shape: [n*k, dim]
+    b = points[idx.reshape(-1)]   # shape: [n*k, dim]
+
+    dists = ball.dist(a, b)  # [n*k]
+    repulsion = torch.exp(-dists / temperature)
+    return repulsion.mean()
+
+
+# def prototype_loss(prototypes):
+#     normed = torch.nn.functional.normalize(prototypes, dim=1)
+#     # Dot product of normalized prototypes is cosine similarity.
+#     product = torch.matmul(normed, normed.t()) + 1
+#     # Remove diagnonal from loss.
+#     product -= 2. * torch.diag(torch.diag(product))
+#     # Minimize maximum cosine similarity.
+#     loss = product.max(dim=1)[0]
+#     return loss.mean()
 
 # def repulsion_loss(embeddings: torch.Tensor, temperature: float = 0.1) -> torch.Tensor:
 #     """
@@ -86,7 +106,7 @@ class PoincareEmbedding(BaseEmbedding):
         epochs: int,
         optimizer: Optimizer,
         scheduler: Optional[LRScheduler] = None,
-        burn_in_epochs: int = 10,
+        burn_in_epochs: int = 50,
         burn_in_lr_mult: float = 0.1,
     ):
         # Store initial learning rate
@@ -103,6 +123,7 @@ class PoincareEmbedding(BaseEmbedding):
             avg_loss = 0
             avg_repulsion_loss = 0
             avg_poincare_loss = 0
+            # avg_norms_loss = 0
 
             for batch in dataloader:
                 edges = batch["edges"].to(self.weight.device)
@@ -114,15 +135,19 @@ class PoincareEmbedding(BaseEmbedding):
 
                 poincare_loss = poincare_embeddings_loss(dists=dists, targets=edge_label_targets)
 
-                repulsion_l = prototype_loss(self.weight)
+                repulsion_l = sampled_poincare_repulsion_loss(self.weight, self.ball)
 
-                loss = repulsion_l + poincare_loss
+                # norms_p = norms_penalty(self.weight, self.ball)
+
+                loss = poincare_loss + repulsion_l
 
                 loss.backward()
                 optimizer.step()
                 avg_loss += loss.item()
+
                 avg_repulsion_loss += repulsion_l.item()
                 avg_poincare_loss += poincare_loss.item()
+                # avg_norms_loss += norms_p.item()
 
                 with torch.no_grad():
                     self.weight.data = self.ball.projx(self.weight.data)
@@ -145,6 +170,7 @@ class PoincareEmbedding(BaseEmbedding):
                 "total_loss": avg_loss / len(dataloader),
                 "repulsion_loss": avg_repulsion_loss / len(dataloader),
                 "poincare_loss": avg_poincare_loss / len(dataloader),
+                # "norms_loss": avg_norms_loss / len(dataloader),
                 "poincare_lr": plr,
                 "poincare_mean_norm": mean_norm,
                 "poincare_max_norm": max_norm,

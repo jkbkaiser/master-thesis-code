@@ -1,0 +1,94 @@
+import json
+import math
+from collections import Counter, defaultdict
+from typing import cast
+
+import datasets
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+from matplotlib import cm
+from matplotlib.colors import LogNorm
+
+from src.constants import NUM_PROC
+from src.shared.datasets import DatasetVersion
+
+# Load dataset
+VERSION = DatasetVersion.GBIF_GENUS_SPECIES_100K
+path = f"jkbkaiser/{VERSION.value}"
+dataset_dict = cast(datasets.DatasetDict, datasets.load_dataset(path, num_proc=NUM_PROC))
+
+ds = dataset_dict["train"].select(range(10000))
+
+# Create mapping: genus → {species → list of indices}
+genus_map = defaultdict(lambda: defaultdict(list))
+
+for i, row in enumerate(ds):
+    genus_map[row["genus"]][row["species"]].append(i)
+
+print(json.dumps(genus_map, indent=2))
+
+# Filter: genus with ≥2 species and each species has ≥3 images
+candidate_genera = {
+    genus: species_map
+    for genus, species_map in genus_map.items()
+}
+
+print(f"Found {len(candidate_genera)} candidate genera")
+
+
+import math
+
+import matplotlib.pyplot as plt
+
+row_id = 0
+images_per_page = 10
+cols = 5  # 2 rows of 5
+quit_flag = False
+
+for genus, species_map in candidate_genera.items():
+    for species, indices in species_map.items():
+        if quit_flag:
+            break
+
+        images = [(i, ds[i]["image"]) for i in indices]
+        num_images = len(images)
+
+        for page_start in range(0, num_images, images_per_page):
+            page_end = page_start + images_per_page
+            page_images = images[page_start:page_end]
+
+            rows = math.ceil(len(page_images) / cols)
+            fig, axs = plt.subplots(rows, cols, figsize=(4 * cols, 4 * rows))
+            axs = axs.flatten() if rows > 1 else [axs]
+
+            try:
+                for i, (sample_id, img) in enumerate(page_images):
+                    print(type(axs[i]))
+                    axs[i].imshow(img)
+                    axs[i].axis("off")
+                    axs[i].set_title(f"Sample_id {sample_id}", fontsize=10)
+            except:
+                pass
+
+            for i in range(len(page_images), len(axs)):
+                axs[i].axis("off")
+
+            page_num = page_start // images_per_page + 1
+            total_pages = math.ceil(num_images / images_per_page)
+
+            fig.suptitle(
+                f"[{row_id}] species: {species} genus: {genus} — Page {page_num}/{total_pages} — {num_images} total images",
+                fontsize=16
+            )
+            plt.tight_layout()
+            plt.show()
+
+            # Ask user what to do
+            action = input("Press [Enter] for next page, [n] for next species, [q] to quit: ").strip().lower()
+
+            if action == "n":
+                break  # Skip remaining pages for this species
+
+        row_id += 1
+

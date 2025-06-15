@@ -10,6 +10,7 @@ dependencies = [
     "datasets>=3.4.1",
     "flax>=0.8.5",
     "geoopt>=0.5.0",
+    "geopandas>=1.0.1",
     "google-cloud-storage>=3.1.0",
     "jax[cuda]>=0.4.30",
     "lightning>=2.5.1",

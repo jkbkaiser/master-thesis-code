@@ -22,7 +22,6 @@ def distortion_loss(
     mask = dist_targets != 0
     dist_loss = ((embedding_dists - dist_targets).abs() / (dist_targets + 1e-8))[mask]
     norm_loss = compute_norm_loss(embeddings, dist_targets, ball, epoch, max_epoch)
-    # print("l", dist_loss.mean(), norm_loss.mean())
     return dist_loss.mean() + 0.01 * norm_loss.mean()
 
 
@@ -74,7 +73,7 @@ class DistortionEmbedding(BaseEmbedding):
         epochs: int,
         optimizer: Optimizer,
         scheduler: Optional[LRScheduler] = None,
-        pretrain_epochs: int = 50,
+        pretrain_epochs: int = 0,
         pretrain_lr: float = 0.1,
         burn_in_epochs: int = 10,
         burn_in_lr_mult: float = 0.1,

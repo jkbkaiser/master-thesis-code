@@ -55,6 +55,8 @@ wedges, texts, autotexts = plt.pie(
 centre_circle = plt.Circle((0, 0), 0.50, fc="white")
 plt.gca().add_artist(centre_circle)
 
+print(wedges)
+
 # Improve text visibility
 for text in texts + autotexts:
     text.set_fontsize(14)
@@ -75,23 +77,6 @@ plt.legend(
 # Save or show
 plt.savefig("species_distribution_100k.png", dpi=300, bbox_inches="tight")
 plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # total_samples = len(all_species)
