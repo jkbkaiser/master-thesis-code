@@ -10,7 +10,7 @@ from matplotlib.colors import LogNorm
 from src.constants import NUM_PROC
 from src.shared.datasets import DatasetVersion
 
-VERSION = DatasetVersion.GBIF_GENUS_SPECIES_100K
+VERSION = DatasetVersion.GBIF_COLEOPTERA_HIERARCHICAL_FULL
 path = f"jkbkaiser/{VERSION.value}"
 dataset_dict = cast(datasets.DatasetDict, datasets.load_dataset(path, num_proc=NUM_PROC))
 

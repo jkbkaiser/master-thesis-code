@@ -7,15 +7,15 @@ from pathlib import Path
 from typing import cast
 
 import numpy as np
-from datasets import Dataset, DatasetDict, Features, Image, Value, load_dataset
+from datasets import DatasetDict, Features, Image, Value, load_dataset
 from google.cloud import storage
 
 from src.constants import GOOGLE_BUCKET, GOOGLE_PROJECT, NUM_PROC
 from src.shared.datasets import DatasetVersion
 
-HUGGING_FACE_SOURCE_DATASET = "jkbkaiser/gbif_raw_100k"
+HUGGING_FACE_SOURCE_DATASET = "jkbkaiser/gbif_coleoptera_eu_full"
 
-VERSION = DatasetVersion.GBIF_GENUS_SPECIES_100K
+VERSION = DatasetVersion.GBIF_COLEOPTERA_HIERARCHICAL_FULL
 HUGGING_FACE_PROCESSED_GENUS_SPECIES_DATASET = f"jkbkaiser/{VERSION.value}"
 
 DATA_DIR = Path("./data")
