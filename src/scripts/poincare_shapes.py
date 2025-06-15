@@ -25,8 +25,6 @@ def plot_points(points, color="r"):
     n = len(points)
     points_on_manifold = ball.expmap0(points)
 
-    # ax.plot(points_on_manifold[:, 0].numpy(), points_on_manifold[:, 1].numpy(), 'ro')
-
     timesteps = torch.linspace(0, 1, num_samples)
     duplicated_timesteps = timesteps.repeat_interleave(2)
     timesteps_pairs = duplicated_timesteps.view(-1, 2)

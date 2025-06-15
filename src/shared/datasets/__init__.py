@@ -23,6 +23,7 @@ class DatasetVersion(str, Enum):
     GBIF_GENUS_SPECIES_10K = "gbif_genus_species_10k"
     GBIF_GENUS_SPECIES_10K_EMBEDDINGS = "gbif_genus_species_10k_embeddings"
     GBIF_GENUS_SPECIES_100K = "gbif_genus_species_100k"
+    GBIF_COLEOPTERA_FULL = "gbif_coleoptera_full"
 
 
 class CustomDataset(data.Dataset):

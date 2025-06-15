@@ -1,26 +1,20 @@
 import json
 import math
-from collections import Counter, defaultdict
+from collections import defaultdict
 from typing import cast
 
 import datasets
 import matplotlib.pyplot as plt
-import numpy as np
-import seaborn as sns
-from matplotlib import cm
-from matplotlib.colors import LogNorm
 
 from src.constants import NUM_PROC
 from src.shared.datasets import DatasetVersion
 
-# Load dataset
 VERSION = DatasetVersion.GBIF_GENUS_SPECIES_100K
 path = f"jkbkaiser/{VERSION.value}"
 dataset_dict = cast(datasets.DatasetDict, datasets.load_dataset(path, num_proc=NUM_PROC))
 
 ds = dataset_dict["train"].select(range(10000))
 
-# Create mapping: genus → {species → list of indices}
 genus_map = defaultdict(lambda: defaultdict(list))
 
 for i, row in enumerate(ds):
@@ -28,7 +22,6 @@ for i, row in enumerate(ds):
 
 print(json.dumps(genus_map, indent=2))
 
-# Filter: genus with ≥2 species and each species has ≥3 images
 candidate_genera = {
     genus: species_map
     for genus, species_map in genus_map.items()
@@ -36,14 +29,9 @@ candidate_genera = {
 
 print(f"Found {len(candidate_genera)} candidate genera")
 
-
-import math
-
-import matplotlib.pyplot as plt
-
 row_id = 0
 images_per_page = 10
-cols = 5  # 2 rows of 5
+cols = 5
 quit_flag = False
 
 for genus, species_map in candidate_genera.items():
@@ -84,11 +72,9 @@ for genus, species_map in candidate_genera.items():
             plt.tight_layout()
             plt.show()
 
-            # Ask user what to do
             action = input("Press [Enter] for next page, [n] for next species, [q] to quit: ").strip().lower()
 
             if action == "n":
-                break  # Skip remaining pages for this species
+                break
 
         row_id += 1
-

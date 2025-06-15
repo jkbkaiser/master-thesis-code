@@ -57,5 +57,4 @@ test = extract_embeddings(ds.test_dataloader, backbone)
 
 dataset_dict = DatasetDict({"train": train, "valid": valid, "test": test})
 
-# Push to Hugging Face Hub
 dataset_dict.push_to_hub(f"jkbkaiser/{DatasetVersion.GBIF_FLAT_10K_EMBEDDINGS.value}", private=True)

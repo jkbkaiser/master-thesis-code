@@ -6,18 +6,15 @@ import pandas as pd
 import seaborn as sns
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 MLFLOW_SERVER = os.environ["MLFLOW_SERVER"]
 mlflow.set_tracking_uri(MLFLOW_SERVER)
 
-# Set experiment name
 experiment_name = "gbif_hyperbolic"
 experiment = mlflow.get_experiment_by_name(experiment_name)
 if experiment is None:
     raise ValueError(f"Experiment '{experiment_name}' not found.")
 
-# List of run IDs to compare
 run_ids_to_compare = [
     "86fab3a2574843c592a9e3e783452ca4",
     "423d8e5d629f4ef0acc5fdd2b6b1c013",
@@ -48,10 +45,8 @@ for run_id in run_ids_to_compare:
     except Exception as e:
         print(f"Failed to retrieve run {run_id}: {e}")
 
-# Create DataFrame for seaborn
 df = pd.DataFrame(records)
 
-# Plot with Seaborn
 sns.set(style="whitegrid", font_scale=1.1)
 plt.figure(figsize=(10, 6))
 
@@ -65,8 +60,6 @@ ax = sns.barplot(
 )
 sns.despine(top=True, right=False, left=True, bottom=False)
 
-# Titles and layout
-# ax.set_title("Macro Recall per Frequency Threshold by Run", fontsize=20)
 ax.set_ylabel("Macro Recall")
 ax.set_xlabel("Frequency Threshold")
 plt.legend(title="Model", loc="upper left")

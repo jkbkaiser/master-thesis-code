@@ -24,12 +24,9 @@ def get_hierarchy(dataset_version, reload: bool = False):
     hierarchy = np.load(path)["data"]
     return hierarchy.squeeze()
 
-
-# Load data
 hierarchy = get_hierarchy(DatasetVersion.GBIF_GENUS_SPECIES_100K.value)
 prototypes = np.load("./prototypes/gbif_genus_species_100k/species_hypersphere/2.npy")
 
-# Choose 10 random genus indices
 num_genus = hierarchy.shape[0]
 num_species = hierarchy.shape[1]
 
@@ -39,7 +36,6 @@ print(t[:10])
 print(np.sort(-t)[:10])
 chosen_genus_indices = (-t).argsort()[:10]
 
-# Setup plot
 fig, ax = plt.subplots(figsize=(8, 8))
 ax.set_xlim(-1.1, 1.1)
 ax.set_ylim(-1.1, 1.1)
@@ -49,7 +45,6 @@ ax.axvline(0, color='gray', linewidth=0.5)
 circle = plt.Circle((0, 0), 1, color='black', fill=False, linestyle='dashed')
 ax.add_patch(circle)
 
-# Define colors
 colors = plt.cm.get_cmap("tab10", 10)
 
 for idx, genus_idx in enumerate(chosen_genus_indices):

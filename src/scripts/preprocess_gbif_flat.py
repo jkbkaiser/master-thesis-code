@@ -109,7 +109,6 @@ def stratified_custom_split(dataset, label_col="species", seed=42):
             continue
 
         random.shuffle(indices)
-
         n = len(indices)
         n_train = int(n * 5 / 7)
         n_valid = int(n * 1 / 7)
