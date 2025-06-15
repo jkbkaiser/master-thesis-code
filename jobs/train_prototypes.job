@@ -14,4 +14,4 @@ module load 2024
 source .env
 source .venv/bin/activate
 
-python -m src.experiments.gbif_hyperbolic.prototypes.uniform_species --dims 128 -d gbif_genus_species_100k
+python -m src.experiments.gbif_hyperbolic.prototypes.poincare --dims 128 -d gbif_genus_species_100k

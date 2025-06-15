@@ -32,12 +32,22 @@ class BaseEmbedding(nn.Module):
         # )
         # self.reset_embeddings()
 
+    # def reset_embeddings(self) -> None:
+    #     nn.init.uniform_(
+    #         tensor=self.weight,
+    #         a=-0.001,
+    #         b=0.001,
+    #     )
+
     def reset_embeddings(self) -> None:
-        nn.init.uniform_(
-            tensor=self.weight,
-            a=-0.001,
-            b=0.001,
-        )
+        with torch.no_grad():
+            direction = torch.randn(self.num_embeddings, self.embedding_dim, device=self.weight.device)
+            direction = direction / direction.norm(dim=-1, keepdim=True)
+
+            # Sample radius close to 1, but not too close (e.g. avoid numerical instability near 1.0)
+            r = torch.empty(self.num_embeddings, 1, device=self.weight.device).uniform_(0.7, 0.99)
+
+            self.weight.data = self.ball.projx(direction * r)
 
     # def reset_embeddings(self) -> None:
     #     with torch.no_grad():
