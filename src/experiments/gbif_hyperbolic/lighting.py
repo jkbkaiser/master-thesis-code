@@ -5,7 +5,6 @@ from pathlib import Path
 import lightning as L
 import torch
 
-from src.experiments.gbif_hyperbolic.models.baseline import Baseline
 from src.experiments.gbif_hyperbolic.models.hyperbolic_genus_species import \
     GenusSpeciesPoincare
 from src.experiments.gbif_hyperbolic.models.hyperbolic_learned import \
@@ -13,6 +12,8 @@ from src.experiments.gbif_hyperbolic.models.hyperbolic_learned import \
 from src.experiments.gbif_hyperbolic.models.hyperbolic_uniform import \
     HyperbolicUniform
 from src.experiments.gbif_hyperbolic.models.hypersphere import Hyperspherical
+from src.experiments.gbif_hyperbolic.models.single_classifier import \
+    SingleClassifier
 from src.shared.datasets import Dataset, DatasetVersion
 from src.shared.prototypes import get_prototypes
 from src.shared.torch.backbones import (ViTAEv2_B, load_for_transfer_learning,
@@ -30,7 +31,7 @@ MODEL_DICT = {
     "hyperbolic-uniform": HyperbolicUniform,
     "hyperbolic-learned": HyperbolicLearned,
     "hyperbolic-genus-species": GenusSpeciesPoincare,
-    "baseline": Baseline,
+    "single": SingleClassifier,
 }
 
 BACKBONE_DICT = {

@@ -19,37 +19,22 @@ class Mlp(nn.Module):
         x = self.fc3(x)
         return x
 
-
-class ClassifierModule(nn.Module):
-    def __init__(self, out_features, architecture, embedding_dim):
-        super().__init__()
-        self.classifiers = nn.ModuleList(
-            [
-                Mlp(out_features, 4096, embedding_dim)
-                for _ in architecture
-            ]
-        )
-
-    def forward(self, features):
-        return [classifier(features) for classifier in self.classifiers]
-
-
-class GenusSpeciesPoincare(nn.Module):
+class SingleClassifier(nn.Module):
     def __init__(self, backbone, out_features, architecture, prototypes, prototype_dim, temp, **_):
         super().__init__()
 
         if backbone is not None:
             self.model = backbone
-            self.model.head = ClassifierModule(out_features, architecture, prototype_dim)
+            self.model.head = Mlp(out_features, 4096, prototype_dim)  # Only one classifier head for species
         else:
-            self.model = Mlp(out_features, 256, prototypes.shape[1])
+            self.model = Mlp(out_features, 256, prototype_dim)
 
         c = 3
 
         self.ball = geoopt.PoincareBallExact(c=c)
 
         self.prototypes = (prototypes * 0.95) / c
-        self.prototypes = self.prototypes[1:] # Don't use the root node
+        self.prototypes = self.prototypes[1:]  # Don't use the root node
 
         print(architecture)
 
@@ -61,23 +46,28 @@ class GenusSpeciesPoincare(nn.Module):
         self.criterion = nn.CrossEntropyLoss()
 
     def forward(self, x):
-        [feature_euc_genus, feature_euc_species] = self.model(x)
-        feature_hyp_genus = self.ball.expmap0(feature_euc_genus)
+        # Only compute species logits
+        feature_euc_species = self.model(x)
         feature_hyp_species = self.ball.expmap0(feature_euc_species)
 
-        return [
-            -self.ball.dist(self.genus_prototypes[None, :, :], feature_hyp_genus[:, None, :]) / self.temp,
-            -self.ball.dist(self.species_protypes[None, :, :], feature_hyp_species[:, None, :]) / self.temp
-        ]
+        # Calculate distances to genus prototypes
+        genus_distances = self.ball.dist(self.genus_prototypes[None, :, :], feature_hyp_species[:, None, :])
+
+        # Return the distances to genus prototypes and species logits
+        return -genus_distances / self.temp, -self.ball.dist(self.species_protypes[None, :, :], feature_hyp_species[:, None, :]) / self.temp
 
     def pred_fn(self, logits):
         [genus_logits, species_logits] = logits
         return genus_logits.argmax(dim=1), species_logits.argmax(dim=1)
 
     def loss_fn(self, logits, genus_labels, species_labels):
-        [genus_logits, species_logits] = logits
+        genus_logits, species_logits = logits
 
-        ce_loss_genus = self.criterion(genus_logits, genus_labels)
+        # Use species labels for CrossEntropyLoss
         ce_loss_species = self.criterion(species_logits, species_labels)
 
-        return 0.3 * ce_loss_genus + 0.7 * ce_loss_species
+        # Compute genus loss based on distance to closest genus prototype
+        # genus_loss = genus_logits.min(dim=1)[0].mean()
+
+        return ce_loss_species
+

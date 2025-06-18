@@ -135,11 +135,11 @@ class PoincareEmbedding(BaseEmbedding):
 
                 poincare_loss = poincare_embeddings_loss(dists=dists, targets=edge_label_targets)
 
-                repulsion_l = sampled_poincare_repulsion_loss(self.weight, self.ball)
+                # repulsion_l = sampled_poincare_repulsion_loss(self.weight, self.ball)
 
                 # norms_p = norms_penalty(self.weight, self.ball)
 
-                loss = poincare_loss + repulsion_l
+                loss = poincare_loss
 
                 loss.backward()
                 optimizer.step()

@@ -113,8 +113,6 @@ class DistortionEmbedding(BaseEmbedding):
             burn_in_lr_mult=burn_in_lr_mult,
         )
 
-        print("FINISHED PRETRAINING")
-
         torch.autograd.set_detect_anomaly(True)
 
         # Copy pretrained embeddings, rescale and clip these and reset optimizer param group
