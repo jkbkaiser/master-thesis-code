@@ -7,8 +7,6 @@ import torch
 
 from src.experiments.gbif_hyperbolic.models.hyperbolic_genus_species import \
     GenusSpeciesPoincare
-from src.experiments.gbif_hyperbolic.models.hyperbolic_learned import \
-    HyperbolicLearned
 from src.experiments.gbif_hyperbolic.models.hyperbolic_uniform import \
     HyperbolicUniform
 from src.experiments.gbif_hyperbolic.models.hypersphere import Hyperspherical
@@ -29,7 +27,6 @@ torch.set_float32_matmul_precision("high")
 MODEL_DICT = {
     "hyperspherical": Hyperspherical,
     "hyperbolic-uniform": HyperbolicUniform,
-    "hyperbolic-learned": HyperbolicLearned,
     "hyperbolic-genus-species": GenusSpeciesPoincare,
     "single": SingleClassifier,
 }
