@@ -129,7 +129,6 @@ class LightningGBIF(L.LightningModule):
 
         return {"optimizer": optimizer}
 
-
     def training_step(self, batch):
         self.log("step", self.current_epoch)
 

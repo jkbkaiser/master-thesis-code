@@ -1,15 +1,15 @@
 import argparse
+import uuid
 from pathlib import Path
 
 import numpy as np
+import requests
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import uuid
-import requests
 
-from src.constants import DEVICE, CACHE_DIR, GOOGLE_BUCKET_URL
+from src.constants import CACHE_DIR, DEVICE, GOOGLE_BUCKET_URL
 from src.shared.datasets import DatasetVersion
 
 

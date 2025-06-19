@@ -57,17 +57,6 @@ def build_genus_species_graph(genus_species_matrix, genus_names=None, species_na
 
     return G
 
-
-def prototype_loss(prototypes):
-    # Dot product of normalized prototypes is cosine similarity.
-    product = torch.matmul(prototypes, prototypes.t()) + 1
-    # Remove diagnonal from loss.
-    product -= 2. * torch.diag(torch.diag(product))
-    # Minimize maximum cosine similarity.
-    loss = product.max(dim=1)[0]
-    return loss.mean(), product.max()
-
-
 def get_hierarchy(dataset_version, reload: bool = False):
     path = CACHE_DIR / f"{dataset_version}/hierarchy.npz"
 
@@ -145,7 +134,7 @@ def run(args):
 
     ball = PoincareBallExact(c=3.0)
     model = DistortionEmbedding(
-        num_embeddings=len(id2lable) + 1,
+        num_embeddings=len(id2lable),
         embedding_dim=args.dims,
         ball=ball,
     )

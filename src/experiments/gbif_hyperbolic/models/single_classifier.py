@@ -67,4 +67,3 @@ class SingleClassifier(nn.Module):
         # genus_loss = genus_logits.min(dim=1)[0].mean()
 
         return ce_loss_species
-

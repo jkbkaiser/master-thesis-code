@@ -20,57 +20,30 @@ def poincare_embeddings_loss(
     loss = (numerator / denominator).log().mean().neg()
     return loss
 
-# def norms_penalty(prototypes, ball):
-#     n = prototypes.size(0)
-#     idx = torch.randint(0, n, (64,), device=prototypes.device)
-#     sampled = prototypes[idx]
-#     dists = ball.dist0(sampled)
-#     return dists.mean()
 
-def sampled_poincare_repulsion_loss(points: torch.Tensor, ball: PoincareBallExact, k: int = 64, temperature: float = 0.1) -> torch.Tensor:
-    """
-    Efficient repulsion loss by sampling k points per prototype.
-    """
-    n = points.size(0)
-    device = points.device
-
-    # Randomly sample k other indices for each point
-    idx = torch.randint(0, n, (n, k), device=device)
-    rows = torch.arange(n, device=device).unsqueeze(1).expand(-1, k)
-
-    a = points[rows.reshape(-1)]  # shape: [n*k, dim]
-    b = points[idx.reshape(-1)]   # shape: [n*k, dim]
-
-    dists = ball.dist(a, b)  # [n*k]
-    repulsion = torch.exp(-dists / temperature)
-    return repulsion.mean()
+def get_repulsion_weight(epoch: int, warmup_epochs: int = 50, start_weight: float = 0.001, final_weight: float = 1.0):
+    if epoch < warmup_epochs:
+        # Linear interpolation from start_weight to final_weight
+        alpha = epoch / warmup_epochs
+        return (1 - alpha) * start_weight + alpha * final_weight
+    else:
+        return final_weight
 
 
-# def prototype_loss(prototypes):
-#     normed = torch.nn.functional.normalize(prototypes, dim=1)
-#     # Dot product of normalized prototypes is cosine similarity.
-#     product = torch.matmul(normed, normed.t()) + 1
-#     # Remove diagnonal from loss.
-#     product -= 2. * torch.diag(torch.diag(product))
-#     # Minimize maximum cosine similarity.
-#     loss = product.max(dim=1)[0]
-#     return loss.mean()
+def tangent_space_repulsion_loss(points, ball, k=50, eps=1e-6):
+    tangent_points = ball.logmap0(points)  # shape: [n, d]
 
-# def repulsion_loss(embeddings: torch.Tensor, temperature: float = 0.1) -> torch.Tensor:
-#     """
-#     Penalizes high cosine similarity between different embeddings.
-#     Intended to encourage spread-out representations.
-#     """
-#     # Normalize embeddings to unit vectors
-#     normed = torch.nn.functional.normalize(embeddings, dim=1)
-#     sim_matrix = torch.matmul(normed, normed.T)  # shape [N, N]
-#
-#     # Mask self-similarity
-#     sim_matrix.fill_diagonal_(float("-inf"))
-#
-#     # Softmax-based repulsion loss: encourage uniform spread
-#     repulsion = torch.logsumexp(sim_matrix / temperature, dim=1)
-#     return repulsion.mean()
+    norms = tangent_points.pow(2).sum(dim=1, keepdim=True)  # [n, 1]
+    dists_sq = norms + norms.t() - 2 * tangent_points @ tangent_points.t()  # [n, n]
+    dists_sq = dists_sq.clamp(min=eps)
+
+    dists_sq.fill_diagonal_(float("inf"))
+
+    topk = torch.topk(dists_sq, k=k, largest=False).values  # [n, k]
+
+    # Step 5: Apply repulsion penalty (inverse squared dist)
+    loss = (1.0 / topk).mean()
+    return loss
 
 class PoincareEmbedding(BaseEmbedding):
     def __init__(
@@ -135,11 +108,9 @@ class PoincareEmbedding(BaseEmbedding):
 
                 poincare_loss = poincare_embeddings_loss(dists=dists, targets=edge_label_targets)
 
-                # repulsion_l = sampled_poincare_repulsion_loss(self.weight, self.ball)
+                repulsion_l = tangent_space_repulsion_loss(self.weight, self.ball) * get_repulsion_weight(epoch)
 
-                # norms_p = norms_penalty(self.weight, self.ball)
-
-                loss = poincare_loss
+                loss = poincare_loss + repulsion_l
 
                 loss.backward()
                 optimizer.step()

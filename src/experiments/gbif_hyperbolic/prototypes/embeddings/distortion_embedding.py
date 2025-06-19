@@ -18,11 +18,14 @@ from .utils.eval_tools import evaluate_edge_predictions
 def distortion_loss(
     embeddings: torch.Tensor, dist_targets: torch.Tensor, ball: PoincareBallExact, epoch:int, max_epoch:int
 ) -> torch.Tensor:
+
     embedding_dists = ball.dist(x=embeddings[:, :, 0, :], y=embeddings[:, :, 1, :])
     mask = dist_targets != 0
     dist_loss = ((embedding_dists - dist_targets).abs() / (dist_targets + 1e-8))[mask]
     norm_loss = compute_norm_loss(embeddings, dist_targets, ball, epoch, max_epoch)
-    return dist_loss.mean() + 0.01 * norm_loss.mean()
+    norm_m = norm_loss.mean()
+
+    return dist_loss.mean() + 0.01 * norm_m
 
 
 def compute_norm_loss(
@@ -32,11 +35,13 @@ def compute_norm_loss(
     epoch:int,
     max_epoch:int
 ) -> torch.Tensor:
+
     embedding_norm = ball.dist0(embeddings,keepdim=True) 
     unique_even_dists = torch.unique(dist_targets[dist_targets % 2 == 0])
     all_even_embedding_norms = [embedding_norm[dist_targets == i] for i in unique_even_dists]
     mean_even_embedding_norms = [norm.mean() for norm in all_even_embedding_norms]
     even_embedding_loss = torch.cat([(even_embedding_norms - mean_even_embedding_norms) for even_embedding_norms, mean_even_embedding_norms in zip(all_even_embedding_norms, mean_even_embedding_norms)])
+
     return (epoch/max_epoch) * even_embedding_loss.abs()
 
 
@@ -145,6 +150,9 @@ class DistortionEmbedding(BaseEmbedding):
                 loss.backward()
                 optimizer.step()
                 avg_loss += loss.item()
+
+                with torch.no_grad():
+                    self.weight.data = self.ball.projx(self.weight.data)
 
             plr = optimizer.param_groups[0]["lr"]
             print(f"Epoch {epoch + 1}:  {avg_loss/len(dataloader)}, lr: {plr}")

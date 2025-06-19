@@ -27,6 +27,8 @@ load_dotenv()
 
 MLFLOW_SERVER = os.environ["MLFLOW_SERVER"]
 CHECKPOINT_DIR = os.environ["CHECKPOINT_DIR"]
+
+
 def build_genus_species_graph(genus_species_matrix, genus_names=None, species_names=None):
     num_genus, num_species = genus_species_matrix.shape
 
@@ -73,6 +75,7 @@ def get_hierarchy(dataset_version, reload: bool = False):
 
     hierarchy = np.load(path)["data"]
     return hierarchy.squeeze()
+
 
 def get_metadata(dataset_version, reload: bool = False):
     directory = CACHE_DIR / dataset_version
@@ -134,14 +137,14 @@ def run(args):
 
     ball = PoincareBallExact(c=3.0)
     model = PoincareEmbedding(
-        num_embeddings=len(id2lable) + 1,
+        num_embeddings=len(id2lable),
         embedding_dim=args.dims,
         ball=ball,
     )
 
     lr = 0.1
     burn_in_lr_mult = 1 / 10
-    epochs = 500
+    epochs = 100
     burn_in_epochs = 10
     momentum = 0.9
     weight_decay = 0.0005
