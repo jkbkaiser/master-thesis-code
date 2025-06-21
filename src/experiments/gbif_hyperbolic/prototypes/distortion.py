@@ -8,7 +8,6 @@ import mlflow
 import networkx as nx
 import numpy as np
 import requests
-import torch
 from dotenv import load_dotenv
 from geoopt import PoincareBallExact
 from geoopt.optim import RiemannianSGD
@@ -141,7 +140,7 @@ def run(args):
 
     lr = 0.1
     burn_in_lr_mult = 1 / 10
-    epochs = 200
+    epochs = 1000
     burn_in_epochs = 10
     momentum = 0.9
     weight_decay = 0.0005
