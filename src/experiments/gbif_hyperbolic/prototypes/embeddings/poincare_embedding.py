@@ -138,7 +138,7 @@ class PoincareEmbedding(BaseEmbedding):
             min_norm = norms.min().item()
 
             mlflow.log_metrics({
-                "total_loss": avg_loss / len(dataloader),
+                "total_poincare_loss": avg_loss / len(dataloader),
                 "repulsion_loss": avg_repulsion_loss / len(dataloader),
                 "poincare_loss": avg_poincare_loss / len(dataloader),
                 # "norms_loss": avg_norms_loss / len(dataloader),

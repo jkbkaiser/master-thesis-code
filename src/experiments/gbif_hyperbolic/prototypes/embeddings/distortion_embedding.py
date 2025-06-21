@@ -17,15 +17,15 @@ from .utils.eval_tools import evaluate_edge_predictions
 
 def distortion_loss(
     embeddings: torch.Tensor, dist_targets: torch.Tensor, ball: PoincareBallExact, epoch:int, max_epoch:int
-) -> torch.Tensor:
+):
 
     embedding_dists = ball.dist(x=embeddings[:, :, 0, :], y=embeddings[:, :, 1, :])
     mask = dist_targets != 0
     dist_loss = ((embedding_dists - dist_targets).abs() / (dist_targets + 1e-8))[mask]
-    norm_loss = compute_norm_loss(embeddings, dist_targets, ball, epoch, max_epoch)
-    norm_m = norm_loss.mean()
 
-    return dist_loss.mean() + 0.01 * norm_m
+    norm_loss = compute_norm_loss(embeddings, dist_targets, ball, epoch, max_epoch)
+
+    return dist_loss.mean(), norm_loss.mean() 
 
 
 def compute_norm_loss(
@@ -78,7 +78,7 @@ class DistortionEmbedding(BaseEmbedding):
         epochs: int,
         optimizer: Optimizer,
         scheduler: Optional[LRScheduler] = None,
-        pretrain_epochs: int = 0,
+        pretrain_epochs: int = 50,
         pretrain_lr: float = 0.1,
         burn_in_epochs: int = 10,
         burn_in_lr_mult: float = 0.1,
@@ -118,6 +118,8 @@ class DistortionEmbedding(BaseEmbedding):
             burn_in_lr_mult=burn_in_lr_mult,
         )
 
+        print("Finished pretraining")
+
         torch.autograd.set_detect_anomaly(True)
 
         # Copy pretrained embeddings, rescale and clip these and reset optimizer param group
@@ -131,7 +133,9 @@ class DistortionEmbedding(BaseEmbedding):
             )
 
         for epoch in range(epochs):
-            avg_loss = 0
+            avg_total_loss = 0
+            avg_dist_loss = 0
+            avg_norm_loss = 0
 
             for batch in dataloader:
                 edges = batch["edges"].to(self.weight.device)
@@ -139,24 +143,30 @@ class DistortionEmbedding(BaseEmbedding):
                 optimizer.zero_grad()
                 embeddings = self(edges)
 
-                loss = distortion_loss(
+                dist_loss, norm_loss = distortion_loss(
                     embeddings=embeddings,
                     dist_targets=dist_targets,
                     ball=self.ball,
                     epoch=epoch,
                     max_epoch = epochs
                 )
+                norm_loss *= 5
+
+                loss = dist_loss + norm_loss
 
                 loss.backward()
                 optimizer.step()
-                avg_loss += loss.item()
+
+                avg_total_loss += loss.item()
+                avg_dist_loss += dist_loss.item()
+                avg_norm_loss += norm_loss.item()
 
                 with torch.no_grad():
                     self.weight.data = self.ball.projx(self.weight.data)
 
             plr = optimizer.param_groups[0]["lr"]
-            print(f"Epoch {epoch + 1}:  {avg_loss/len(dataloader)}, lr: {plr}")
 
+            print(f"Epoch {epoch + 1}:  {avg_total_loss/len(dataloader)}, lr: {plr}")
 
             norms = self.weight.norm(dim=1)
 
@@ -165,7 +175,9 @@ class DistortionEmbedding(BaseEmbedding):
             min_norm = norms.min().item()
 
             mlflow.log_metrics({
-                "distortion_loss": avg_loss / len(dataloader),
+                "total_distortion_loss": avg_total_loss / len(dataloader),
+                "dist_loss": avg_dist_loss / len(dataloader),
+                "norm_loss": avg_norm_loss / len(dataloader),
                 "distortion_lr": plr,
                 "distortion_mean_norm": mean_norm,
                 "distortion_max_norm": max_norm,

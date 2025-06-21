@@ -151,7 +151,32 @@ for idx, genus_idx in enumerate(chosen_genus_indices):
 
 plt.legend()
 plt.title("t-SNE of Prototypes")
-plt.savefig(os.path.join(output_dir, "tsne_scatter_plot.png"))
+plt.savefig(os.path.join(output_dir, "tsne_scatter_plot_top_10.png"))
+plt.close()
+
+fig, ax = plt.subplots(figsize=(8, 8))
+ax.set_xlim(-1.1, 1.1)
+ax.set_ylim(-1.1, 1.1)
+ax.set_aspect("equal")
+ax.axhline(0, color='gray', linewidth=0.5)
+ax.axvline(0, color='gray', linewidth=0.5)
+circle = plt.Circle((0, 0), 1, color='black', fill=False, linestyle='dashed')
+ax.add_patch(circle)
+
+# Plot species prototypes first
+for genus_idx in range(num_genus):
+    species_indices = np.where(hierarchy[genus_idx] == 1)[0]
+    species_proj = proj[num_genus + species_indices]
+    ax.scatter(species_proj[:, 0], species_proj[:, 1], 
+               color="blue", alpha=0.4, s=10, label=f"Genus {genus_idx}" if genus_idx < 10 else None)
+
+# Plot genus prototypes last (on top)
+genus_proj = proj[:num_genus]
+ax.scatter(genus_proj[:, 0], genus_proj[:, 1], 
+           color="red", edgecolors='black', s=10, marker='o')
+
+ax.set_title("t-SNE of Genus and Species Prototypes")
+plt.savefig(os.path.join(output_dir, "tsne_scatter_plot_genus_vs_species.png"))
 plt.close()
 
 # Create GeoOpt Poincaré Ball instance
