@@ -21,7 +21,7 @@ python -m src.experiments.gbif_hyperbolic.train \
     --learning-rate 0.0001 \
     --backbone-learning-rate 0.0001 \
     --prototype_dim 128 \
-    --prototypes distortion \
+    --prototypes entailment_cones \
     --num-epochs 10 \
     --batch-size 64 \
     --temp 0.07 \

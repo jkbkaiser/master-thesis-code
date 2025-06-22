@@ -1,9 +1,6 @@
 import geoopt
 import torch.nn as nn
-from geoopt.manifolds import PoincareBallExact
-from geoopt.tensor import ManifoldParameter, ManifoldTensor
 
-from src.constants import DEVICE
 
 
 class Mlp(nn.Module):
@@ -51,14 +48,7 @@ class GenusSpeciesPoincare(nn.Module):
         c = 3
 
         self.ball = geoopt.PoincareBallExact(c=c)
-
-        # self.prototypes = prototypes
-
-        data = ManifoldTensor(prototypes, manifold=self.ball).to(DEVICE)
-        self.prototypes = ManifoldParameter(
-            data=data
-        )
-
+        self.prototypes = prototypes
 
         [self.num_genus, self.num_species] = architecture
         self.genus_prototypes = self.prototypes[:self.num_genus]

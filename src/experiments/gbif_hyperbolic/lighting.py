@@ -4,7 +4,6 @@ from pathlib import Path
 
 import lightning as L
 import torch
-from geoopt.optim import RiemannianSGD
 
 from src.experiments.gbif_hyperbolic.models.hyperbolic_genus_species import \
     GenusSpeciesPoincare
@@ -126,17 +125,17 @@ class LightningGBIF(L.LightningModule):
         weight_decay = self.optimizer_hparams["weight_decay"]
 
         params = filter(lambda p: p.requires_grad, self.model.parameters())
-        # optimizer = torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
+        optimizer = torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
 
-        optimizer = RiemannianSGD(
-            params=params,
-            lr=lr,
-            momentum=0.9,
-            dampening=0,
-            weight_decay=weight_decay,
-            nesterov=True,
-            stabilize=500
-        )
+        # optimizer = RiemannianSGD(
+        #     params=params,
+        #     lr=lr,
+        #     momentum=0.9,
+        #     dampening=0,
+        #     weight_decay=weight_decay,
+        #     nesterov=True,
+        #     stabilize=500
+        # )
 
         return {"optimizer": optimizer}
 
