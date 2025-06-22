@@ -30,7 +30,7 @@ def get_hierarchy(dataset_version, reload: bool = False):
 
 
 # Define directory for saving results and images
-prototype_name = "distortion"  # Example prototype name, adjust as needed
+prototype_name = "entailment_cones"  # Example prototype name, adjust as needed
 dimensionality = 128  # Example dimensionality, adjust as needed
 
 # Create directory named after the prototype and dimensionality

@@ -12,6 +12,7 @@ class PrototypeVersion(str, Enum):
     GENUS_SPECIES_POINCARE  = "genus_species_poincare"
     AVG_GENUS  = "avg_genus"
     DISTORTION  = "distortion"
+    ENTAILMENT_CONES = "entailment_cones"
     SPECIES_HYPERSPHERE_UNIFORM = "species_hypersphere_uniform"
     SPECIES_HYPERSPHERE = "species_hypersphere"
 
