@@ -18,6 +18,30 @@ from .utils.eval_tools import evaluate_edge_predictions
 # from .utils.clone_optimizer import clone_one_group_optimizer
 # from .utils.eval_tools import evaluate_edge_predictions
 
+def get_repulsion_weight(epoch: int, warmup_epochs: int = 50, start_weight: float = 0.001, final_weight: float = 1.0):
+    if epoch < warmup_epochs:
+        # Linear interpolation from start_weight to final_weight
+        alpha = epoch / warmup_epochs
+        return (1 - alpha) * start_weight + alpha * final_weight
+    else:
+        return final_weight
+
+
+def tangent_space_repulsion_loss(points, ball, k=50, eps=1e-6):
+    tangent_points = ball.logmap0(points)  # shape: [n, d]
+
+    norms = tangent_points.pow(2).sum(dim=1, keepdim=True)  # [n, 1]
+    dists_sq = norms + norms.t() - 2 * tangent_points @ tangent_points.t()  # [n, n]
+    dists_sq = dists_sq.clamp(min=eps)
+
+    dists_sq.fill_diagonal_(float("inf"))
+
+    topk = torch.topk(dists_sq, k=k, largest=False).values  # [n, k]
+
+    # Step 5: Apply repulsion penalty (inverse squared dist)
+    loss = (1.0 / topk).mean()
+    return loss
+
 
 
 def xi(parent: torch.Tensor, child: torch.Tensor, dim: int = -1) -> torch.Tensor:
@@ -102,7 +126,7 @@ class EntailmentConeEmbedding(BaseEmbedding):
         epochs: int,
         optimizer: Optimizer,
         scheduler: Optional[LRScheduler] = None,
-        pretrain_epochs: int = 0,
+        pretrain_epochs: int = 50,
         pretrain_lr: float = 0.1,
         margin: float = 0.01,
         burn_in_epochs: int = 10,
@@ -159,8 +183,8 @@ class EntailmentConeEmbedding(BaseEmbedding):
 
         for epoch in range(epochs):
             avg_total_loss = 0
-            # avg_dist_loss = 0
-            # avg_norm_loss = 0
+            avg_repulsion_loss = 0
+            avg_entailment_loss = 0
 
             for batch in dataloader:
                 edges = batch["edges"].to(self.weight.device)
@@ -169,16 +193,20 @@ class EntailmentConeEmbedding(BaseEmbedding):
                 optimizer.zero_grad()
 
                 energies = self(edges=edges)
-                loss = hyperbolic_entailment_cone_loss(
+                ent_loss = hyperbolic_entailment_cone_loss(
                     energies=energies, targets=edge_label_targets, margin=margin
                 )
+
+                repulsion_l = tangent_space_repulsion_loss(self.weight, self.ball) * get_repulsion_weight(epoch) * 0
+
+                loss = ent_loss + repulsion_l
 
                 loss.backward()
                 optimizer.step()
 
                 avg_total_loss += loss.item()
-                # avg_dist_loss += dist_loss.item()
-                # avg_norm_loss += norm_loss.item()
+                avg_repulsion_loss += repulsion_l.item()
+                avg_entailment_loss += ent_loss.item()
 
                 with torch.no_grad():
                     self.weight.data = self.ball.projx(self.weight.data)
@@ -195,6 +223,8 @@ class EntailmentConeEmbedding(BaseEmbedding):
 
             mlflow.log_metrics({
                 "total_entailment_loss": avg_total_loss / len(dataloader),
+                "entailment_loss": avg_entailment_loss / len(dataloader),
+                "repulsion_loss": avg_repulsion_loss / len(dataloader),
                 "entailment_lr": plr,
                 "entailment_mean_norm": mean_norm,
                 "entailment_max_norm": max_norm,
