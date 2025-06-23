@@ -94,6 +94,7 @@ def edge_corrupt_both_sampler(
     negative_source_nodes = list(
         hierarchy.nodes() - nx.ancestors(hierarchy, rel[1]) - {rel[1]}
     )
+    num_neg_source = min(num_neg_source, len(negative_source_nodes))
     negative_source_nodes = sample_strat(
         negative_nodes=negative_source_nodes,
         sample_size=num_neg_source,
@@ -108,6 +109,7 @@ def edge_corrupt_both_sampler(
     negative_target_nodes = list(
         hierarchy.nodes() - nx.descendants(hierarchy, rel[0]) - {rel[0]}
     )
+    num_neg_target = min(num_neg_target, len(negative_target_nodes))
     negative_target_nodes = sample_strat(
         negative_nodes=negative_target_nodes,
         sample_size=num_neg_target,

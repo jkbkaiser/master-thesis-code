@@ -69,20 +69,40 @@ class EdgeSampler:
         )
 
 
-
-
     def sample(self, rel: tuple[int, int]) -> dict[str, torch.Tensor]:
         edges, edge_label_targets = self.edge_sample_fn(rel=rel)
+        edges = edges.to(dtype=torch.long)
+
+        target_size = self.num_negs + 1
+        num_current = edges.size(0)
+        pad_size = target_size - num_current
+
+        if pad_size > 0:
+            pad_edges = torch.full((pad_size, 2), fill_value=0, dtype=edges.dtype)
+            edges = torch.cat([edges, pad_edges], dim=0)
+
+            pad_labels = torch.zeros(pad_size, dtype=edge_label_targets.dtype)
+            edge_label_targets = torch.cat([edge_label_targets, pad_labels], dim=0)
+            mask = torch.cat([
+                torch.ones(num_current, dtype=torch.bool),
+                torch.zeros(pad_size, dtype=torch.bool)
+            ])
+        else:
+            mask = torch.ones(target_size, dtype=torch.bool)
 
         sample = {
             "edges": edges,
             "edge_label_targets": edge_label_targets,
+            "mask": mask,
         }
 
         if self.dist_sample_strat is not None:
-            sample["dist_targets"] = self.dist_sample_strat_fn(
-                edges=sample["edges"],
-                dist_matrix=self.dist_matrix
-            )
+            dist_targets = self.dist_sample_strat_fn(edges=edges, dist_matrix=self.dist_matrix)
+
+            if pad_size > 0:
+                pad_dists = torch.zeros(pad_size, dtype=dist_targets.dtype)
+                dist_targets = torch.cat([dist_targets, pad_dists], dim=0)
+
+            sample["dist_targets"] = dist_targets
 
         return sample

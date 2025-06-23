@@ -16,12 +16,11 @@ from .utils.eval_tools import evaluate_edge_predictions
 
 
 def distortion_loss(
-    embeddings: torch.Tensor, dist_targets: torch.Tensor, ball: PoincareBallExact, epoch:int, max_epoch:int
+    embeddings: torch.Tensor, dist_targets: torch.Tensor, ball: PoincareBallExact, epoch:int, max_epoch:int, mask,
 ):
-
     embedding_dists = ball.dist(x=embeddings[:, :, 0, :], y=embeddings[:, :, 1, :])
-    mask = dist_targets != 0
-    dist_loss = ((embedding_dists - dist_targets).abs() / (dist_targets + 1e-8))[mask]
+    combined_mask = (dist_targets != 0) & mask
+    dist_loss = ((embedding_dists - dist_targets).abs() / (dist_targets + 1e-8))[combined_mask]
 
     norm_loss = compute_norm_loss(embeddings, dist_targets, ball, epoch, max_epoch)
 
@@ -140,6 +139,8 @@ class DistortionEmbedding(BaseEmbedding):
             for batch in dataloader:
                 edges = batch["edges"].to(self.weight.device)
                 dist_targets = batch["dist_targets"].to(self.weight.device)
+                mask = batch["mask"].to(self.weight.device)
+
                 optimizer.zero_grad()
                 embeddings = self(edges)
 
@@ -148,7 +149,8 @@ class DistortionEmbedding(BaseEmbedding):
                     dist_targets=dist_targets,
                     ball=self.ball,
                     epoch=epoch,
-                    max_epoch = epochs
+                    max_epoch = epochs,
+                    mask = mask
                 )
                 norm_loss *= 5
 

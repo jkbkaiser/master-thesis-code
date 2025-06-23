@@ -12,9 +12,11 @@ from .base import BaseEmbedding
 
 
 def poincare_embeddings_loss(
-    dists: torch.Tensor, targets: torch.Tensor
+    dists: torch.Tensor, targets: torch.Tensor, mask
 ) -> torch.Tensor:
     logits = dists.neg().exp()
+    logits = logits * mask
+
     numerator = torch.where(condition=targets, input=logits, other=0).sum(dim=-1)
     denominator = logits.sum(dim=-1)
     loss = (numerator / denominator).log().mean().neg()
@@ -41,7 +43,6 @@ def tangent_space_repulsion_loss(points, ball, k=50, eps=1e-6):
 
     topk = torch.topk(dists_sq, k=k, largest=False).values  # [n, k]
 
-    # Step 5: Apply repulsion penalty (inverse squared dist)
     loss = (1.0 / topk).mean()
     return loss
 
@@ -100,13 +101,14 @@ class PoincareEmbedding(BaseEmbedding):
 
             for batch in dataloader:
                 edges = batch["edges"].to(self.weight.device)
+                mask = batch["mask"].to(self.weight.device)
                 edge_label_targets = batch["edge_label_targets"].to(self.weight.device)
 
                 optimizer.zero_grad()
 
                 dists = self(edges=edges)
 
-                poincare_loss = poincare_embeddings_loss(dists=dists, targets=edge_label_targets)
+                poincare_loss = poincare_embeddings_loss(dists=dists, targets=edge_label_targets, mask=mask)
 
                 repulsion_l = tangent_space_repulsion_loss(self.weight, self.ball) * get_repulsion_weight(epoch)
 

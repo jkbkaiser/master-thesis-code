@@ -26,35 +26,42 @@ MLFLOW_SERVER = os.environ["MLFLOW_SERVER"]
 CHECKPOINT_DIR = os.environ["CHECKPOINT_DIR"]
 
 
-def build_genus_species_graph(genus_species_matrix, genus_names=None, species_names=None):
-    num_genus, num_species = genus_species_matrix.shape
-
-    if genus_names is None:
-        genus_names = [i for i in range(num_genus)]
-    if species_names is None:
-        species_names = [num_genus + j for j in range(num_species)]
-
+def build_hierarchical_graph(hierarchy_matrices, level_names):
     G = nx.DiGraph()
+    node_index = 0
+    level_offsets = []
+    node_labels = {}  # index → name
 
-    # Add root node with index -1
-    G.add_node(-1, index=-1)
+    # Calculate offsets for index uniqueness across levels
+    for names in level_names:
+        level_offsets.append(node_index)
+        for name in names:
+            G.add_node(node_index, label=name)
+            node_labels[name] = node_index
+            node_index += 1
 
-    # Add genus nodes with index 0 .. num_genus-1
-    for i, genus in enumerate(genus_names):
-        G.add_node(genus, index=i)
-        G.add_edge(-1, genus)
+    # Add a virtual root
+    root_index = -1
+    G.add_node(root_index, label="root")
+    for i in range(len(level_names[0])):
+        G.add_edge(root_index, level_offsets[0] + i)
 
-    # Add species nodes with index offset to avoid collision
-    for j, species in enumerate(species_names):
-        G.add_node(species, index=num_genus + j)
+    # Add edges per level
+    for level in range(len(hierarchy_matrices)):
+        mat = hierarchy_matrices[level]
+        parent_offset = level_offsets[level]
+        child_offset = level_offsets[level + 1]
 
-    # Add edges from genus to species based on the matrix
-    for i in range(num_genus):
-        for j in range(num_species):
-            if genus_species_matrix[i, j] == 1:
-                G.add_edge(genus_names[i], species_names[j])
+        num_parents, num_children = mat.shape
+        for i in range(num_parents):
+            for j in range(num_children):
+                if mat[i, j] == 1:
+                    parent_idx = parent_offset + i
+                    child_idx = child_offset + j
+                    G.add_edge(parent_idx, child_idx)
 
     return G
+
 
 def get_hierarchy(dataset_version, reload: bool = False):
     path = CACHE_DIR / f"{dataset_version}/hierarchy.npz"
@@ -64,13 +71,20 @@ def get_hierarchy(dataset_version, reload: bool = False):
         response = requests.get(url)
 
         if response.status_code != 200:
-            raise Exception(f"Could not retrieve metadata for {dataset_version}")
+            raise Exception(f"Could not retrieve hierarchy for {dataset_version}")
 
         with open(path, "wb") as f:
             f.write(response.content)
 
-    hierarchy = np.load(path)["data"]
-    return hierarchy.squeeze()
+    data = np.load(path)
+
+    if "data" in data:
+        # Single hierarchy matrix
+        return [data["data"].squeeze()]
+
+    # Otherwise, assume multiple levels: level_0, level_1, ...
+    hierarchy = [data[key] for key in sorted(data.files, key=lambda k: int(k.split("_")[1]))]
+    return hierarchy
 
 
 def get_metadata(dataset_version, reload: bool = False):
@@ -100,18 +114,22 @@ def get_metadata(dataset_version, reload: bool = False):
 def run(args):
     hierarchy = get_hierarchy(args.dataset)
     metadata = get_metadata(args.dataset)
-    genusid_2_label = metadata["per_level"][0]["id2label"]
-    speciesid_2_label = metadata["per_level"][1]["id2label"]
 
-    id2lable = {}
+    # Build id2label dict for all ranks
+    id2label_dict = {
+        rank: {int(k): v for k, v in per_level["id2label"].items()}
+        for rank, per_level in zip(["class", "order", "family", "subfamily", "genus", "species"], metadata["per_level"])
+    }
 
-    for id, label in genusid_2_label.items():
-        id2lable[int(id)] = label
+    # Construct level_names for the graph
+    level_names = [list(id2label_dict[rank].values()) for rank in ["class", "order", "family", "subfamily", "genus", "species"] if rank in id2label_dict]
 
-    for id, label in speciesid_2_label.items():
-        id2lable[int(id) + len(genusid_2_label)] = label
+    graph = build_hierarchical_graph(
+        hierarchy_matrices=hierarchy,
+        level_names=level_names
+    )
 
-    graph = build_genus_species_graph(hierarchy)
+    print("Node count:", len(graph.nodes))
 
     mlflow.set_tracking_uri(MLFLOW_SERVER)
     mlflow.set_experiment("prototypes")
@@ -133,7 +151,7 @@ def run(args):
 
     ball = PoincareBallExact(c=3.0)
     model = EntailmentConeEmbedding(
-        num_embeddings=len(id2lable),
+        num_embeddings=len(graph.nodes),
         embedding_dim=args.dims,
         ball=ball,
     )
@@ -177,7 +195,7 @@ def run(args):
             store_losses=True,
         )
 
-    base = Path("./prototypes/gbif_genus_species_100k/entailment_cones")
+    base = Path(f"./prototypes/{args.dataset}/entailment_cones")
 
     if not base.is_dir():
         base.mkdir(parents=True)

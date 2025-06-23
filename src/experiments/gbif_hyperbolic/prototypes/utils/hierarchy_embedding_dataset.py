@@ -43,4 +43,28 @@ class HierarchyEmbeddingDataset(Dataset):
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         rel = self.edges_list[idx]
         sample = self.sampler.sample(rel=rel)
+
+        # Ensure each tensor in the sample has length == 1 + num_negs
+        max_len = 1 + self.num_negs
+
+        for key in sample:
+            if sample[key].shape[0] > max_len:
+                sample[key] = sample[key][:max_len]
+            elif sample[key].shape[0] < max_len:
+                # Optional: pad with zeros or raise error if sample too short
+                raise ValueError(f"Sample too short for key '{key}': got {sample[key].shape[0]}, expected {max_len}")
+
         return sample
+
+    # def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
+    #     print("start sample")
+    #     rel = self.edges_list[idx]
+    #     sample = self.sampler.sample(rel=rel)
+    #
+    #     for key, value in sample.items():
+    #         if value.shape[0] != 11:
+    #             print("wrong shape")
+    #             print(key, value.shape)
+    #
+    #     print("return sample")
+    #     return sample

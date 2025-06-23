@@ -7,14 +7,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from geoopt import PoincareBallExact
-from networkx.algorithms import hierarchy
 
 from src.constants import DEVICE
 from src.shared.datasets import Dataset, DatasetVersion
 
 
 def prototype_loss(prototypes, hierarchy, alpha=0.5, beta=0.3, gamma=0.2, eps=1e-8):
-    # Normalize prototypes
     prototypes = F.normalize(prototypes, dim=1)  # [S, D]
 
     # ---------- Push term (species) ----------
@@ -49,11 +47,6 @@ def prototype_loss(prototypes, hierarchy, alpha=0.5, beta=0.3, gamma=0.2, eps=1e
 
 
 def compute_genus_prototypes_hyperbolic(species_prototypes, hierarchy, ball, eps=1e-8):
-    """
-    species_prototypes: [S, D] in Poincaré ball
-    hierarchy: [G, S] binary mask (genus x species)
-    ball: geoopt.PoincareBallExact manifold
-    """
     species_prototypes = ball.projx(species_prototypes)
 
     genus_weights = hierarchy / (hierarchy.sum(dim=1, keepdim=True) + eps)  # [G, S]
@@ -61,12 +54,12 @@ def compute_genus_prototypes_hyperbolic(species_prototypes, hierarchy, ball, eps
     genus_means = []
     for g in range(hierarchy.shape[0]):
         indices = hierarchy[g].nonzero(as_tuple=True)[0]  # species indices for genus g
-        x = species_prototypes[indices]  # [k, D]
-        w = genus_weights[g, indices]    # [k]
+        x = species_prototypes[indices] 
+        w = genus_weights[g, indices]
         genus_mean = ball.weighted_midpoint(x, w)
         genus_means.append(genus_mean)
 
-    genus_means = torch.stack(genus_means, dim=0)  # [G, D]
+    genus_means = torch.stack(genus_means, dim=0)
 
     # Stack genus and species prototypes
     final_prototypes = torch.cat([genus_means, species_prototypes], dim=0)
@@ -117,7 +110,7 @@ def run(args):
 
     prototypes = prototypes.data.cpu()
 
-    ball = PoincareBallExact(c=3.0)
+    ball = PoincareBallExact(c=args.curvature)
 
     final_prototypes = compute_genus_prototypes_hyperbolic(prototypes, genus_species_matrix.cpu(), ball)
 
@@ -147,6 +140,12 @@ def parse_args():
         default=2,
         required=True,
         type=int,
+    )
+    parser.add_argument(
+        "--curvature",
+        default=3,
+        required=True,
+        type=float
     )
     parser.add_argument('--lr', dest="learning_rate", default=0.1, type=float)
     parser.add_argument("--reload", action="store_true", default=False, required=False)
