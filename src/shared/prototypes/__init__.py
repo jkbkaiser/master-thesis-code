@@ -21,7 +21,7 @@ def get_prototypes(prototype_version, dataset_version, dimensionality):
     prototype_path = Path("./prototypes") / dataset_version / prototype_version / f"{dimensionality}.npy"
     prototypes = torch.from_numpy(np.load(prototype_path)).float().to(DEVICE)
 
-    if prototype_version in [PrototypeVersion.SPECIES_HYPERSPHERE.value, PrototypeVersion.SPECIES_HYPERSPHERE_UNIFORM.value]:
+    if prototype_version in [PrototypeVersion.SPECIES_HYPERSPHERE.value]:
         c = 3
         prototypes = (prototypes * 0.95) / math.sqrt(c)
 

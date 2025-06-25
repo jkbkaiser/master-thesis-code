@@ -150,7 +150,7 @@ def run(args):
         shuffle=True,
     )
 
-    ball = PoincareBallExact(c=3.0)
+    ball = PoincareBallExact(c=args.curvature)
     model = PoincareEmbedding(
         num_embeddings=len(graph.nodes),
         embedding_dim=args.dims,
@@ -189,6 +189,7 @@ def run(args):
             "weight_decay": weight_decay,
             "scheduler": "cosine annealing",
             "dims": args.dims,
+            "curvature": args.curvature,
         })
 
         model.train_model(
@@ -212,6 +213,7 @@ def parse_args():
         prog="Hyperbolic embeddings",
         description="Training script for embedding genus and species in hyperbolic space",
     )
+    parser.add_argument("--curvature", default=3., required=False, type=float)
     parser.add_argument("--batch-size", default=256, required=False, type=int)
     parser.add_argument(
         "-d",

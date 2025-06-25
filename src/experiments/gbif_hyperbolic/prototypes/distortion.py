@@ -147,7 +147,7 @@ def run(args):
         shuffle=True,
     )
 
-    ball = PoincareBallExact(c=3.0)
+    ball = PoincareBallExact(c=args.curvature)
     model = DistortionEmbedding(
         num_embeddings=len(graph.nodes),
         embedding_dim=args.dims,
@@ -175,6 +175,7 @@ def run(args):
         mlflow.log_params({
             "nodes": len(graph.nodes),
             "type": "distortion",
+            "curvature": args.curvature,
             "distortion_lr": lr,
             "distortion_epochs": epochs,
             "distortion_burn_in_lr_mult": burn_in_lr_mult,
@@ -228,6 +229,7 @@ def parse_args():
     parser.add_argument('--momentum', dest="momentum", default=0.9, type=float)
     parser.add_argument('--epochs', dest="epochs", default=10000, type=int,)
     parser.add_argument('--resdir', default="./prototypes", type=Path)
+    parser.add_argument("--curvature", default=3., required=False, type=float)
     return parser.parse_args()
 
 

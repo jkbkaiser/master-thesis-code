@@ -46,38 +46,38 @@ def prototype_loss(prototypes, hierarchy, alpha=0.5, beta=0.3, gamma=0.2, eps=1e
     return loss, push_loss_species.item(), closeless, push_loss_genus.item()
 
 
-def compute_genus_prototypes_hyperbolic(species_prototypes, hierarchy, ball, eps=1e-8):
-    species_prototypes = ball.projx(species_prototypes)
-
-    genus_weights = hierarchy / (hierarchy.sum(dim=1, keepdim=True) + eps)  # [G, S]
-
-    genus_means = []
-    for g in range(hierarchy.shape[0]):
-        indices = hierarchy[g].nonzero(as_tuple=True)[0]  # species indices for genus g
-        x = species_prototypes[indices] 
-        w = genus_weights[g, indices]
-        genus_mean = ball.weighted_midpoint(x, w)
-        genus_means.append(genus_mean)
-
-    genus_means = torch.stack(genus_means, dim=0)
-
-    # Stack genus and species prototypes
-    final_prototypes = torch.cat([genus_means, species_prototypes], dim=0)
-    return final_prototypes
-
-# def compute_genus_prototypes(species_prototypes, hierarchy, eps=1e-8):
-#     genus_weights = (hierarchy / (torch.sum(hierarchy, dim=1, keepdim=True) + eps)).to(torch.float32)  # [G, S]
-#     genus_means = genus_weights @ species_prototypes  # [G, D]
-#     genus_means = F.normalize(genus_means, dim=1) / 2
+# def compute_genus_prototypes_hyperbolic(species_prototypes, hierarchy, ball, eps=1e-8):
+#     species_prototypes = ball.projx(species_prototypes)
 #
-#     num_genus, num_species = hierarchy.shape
+#     genus_weights = hierarchy / (hierarchy.sum(dim=1, keepdim=True) + eps)  # [G, S]
 #
-#     final_prototypes = torch.zeros(sum(hierarchy.shape), genus_means.shape[1], device=species_prototypes.device)
+#     genus_means = []
+#     for g in range(hierarchy.shape[0]):
+#         indices = hierarchy[g].nonzero(as_tuple=True)[0]  # species indices for genus g
+#         x = species_prototypes[indices] 
+#         w = genus_weights[g, indices]
+#         genus_mean = ball.weighted_midpoint(x, w)
+#         genus_means.append(genus_mean)
 #
-#     final_prototypes[:num_genus] = torch.Tensor(genus_means)
-#     final_prototypes[num_genus:] = torch.Tensor(species_prototypes)
+#     genus_means = torch.stack(genus_means, dim=0)
 #
+#     # Stack genus and species prototypes
+#     final_prototypes = torch.cat([genus_means, species_prototypes], dim=0)
 #     return final_prototypes
+
+def compute_genus_prototypes(species_prototypes, hierarchy, eps=1e-8):
+    genus_weights = (hierarchy / (torch.sum(hierarchy, dim=1, keepdim=True) + eps)).to(torch.float32)  # [G, S]
+    genus_means = genus_weights @ species_prototypes  # [G, D]
+    genus_means = F.normalize(genus_means, dim=1) / 2
+
+    num_genus, num_species = hierarchy.shape
+
+    final_prototypes = torch.zeros(sum(hierarchy.shape), genus_means.shape[1], device=species_prototypes.device)
+
+    final_prototypes[:num_genus] = torch.Tensor(genus_means)
+    final_prototypes[num_genus:] = torch.Tensor(species_prototypes)
+
+    return final_prototypes
 
 
 def run(args):
@@ -110,15 +110,16 @@ def run(args):
 
     prototypes = prototypes.data.cpu()
 
-    ball = PoincareBallExact(c=args.curvature)
+    # ball = PoincareBallExact(c=args.curvature)
+    # final_prototypes = compute_genus_prototypes_hyperbolic(prototypes, genus_species_matrix.cpu(), ball)
 
-    final_prototypes = compute_genus_prototypes_hyperbolic(prototypes, genus_species_matrix.cpu(), ball)
+    # final_prototypes = compute_genus_prototypes(prototypes, genus_species_matrix.cpu())
 
-    print(final_prototypes.shape)
+    # print(final_prototypes.shape)
 
-    base = Path("./prototypes/gbif_genus_species_100k/avg_genus")
+    base = Path(f"./prototypes/{args.dataset}/avg_genus")
     f = base / f"{args.dims}.npy"
-    np.save(f, final_prototypes.numpy())
+    np.save(f, prototypes.numpy())
     print(f"saved to {f}")
 
 

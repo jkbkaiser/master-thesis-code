@@ -49,7 +49,13 @@ def run(args):
 
         print(f"{i} {args.epochs} {sep}")
 
-    np.save(f"{args.resdir}/prototypes-{args.dims}-{args.dataset}.npy", prototypes.data.cpu().numpy())
+    final_prototypes = prototypes.data.cpu().numpy()
+
+    base = Path(f"./prototypes/{args.dataset}/hypersphere_uniform")
+    f = base / f"{args.dims}.npy"
+    np.save(f, final_prototypes)
+    print(f"saved to {f}")
+
 
 def parse_args():
     parser = argparse.ArgumentParser(

@@ -16,10 +16,10 @@ if experiment is None:
     raise ValueError(f"Experiment '{experiment_name}' not found.")
 
 run_ids_to_compare = [
-    "86fab3a2574843c592a9e3e783452ca4",
+    # "86fab3a2574843c592a9e3e783452ca4",
+    "8115459ea38545378430c491c8de53dd",
     "423d8e5d629f4ef0acc5fdd2b6b1c013",
     "dd0caaa80d14416b8a3e094cfaad4916",
-    "8115459ea38545378430c491c8de53dd"
 ]
 
 frequencies = ["10", "50", "100", "all"]
