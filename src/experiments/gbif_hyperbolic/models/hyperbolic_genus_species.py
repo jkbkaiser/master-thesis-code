@@ -45,7 +45,7 @@ class GenusSpeciesPoincare(nn.Module):
         else:
             self.model = Mlp(out_features, 256, prototypes.shape[1])
 
-        c = 3
+        c = 1.5
 
         self.ball = geoopt.PoincareBallExact(c=c)
         self.prototypes = prototypes

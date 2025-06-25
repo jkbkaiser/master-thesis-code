@@ -153,7 +153,7 @@ def parse_args():
     )
     parser.add_argument(
         "--prototypes",
-        default=PrototypeVersion.SPECIES_HYPERSPHERE_UNIFORM.value,
+        default=PrototypeVersion.HYPERSPHERE_UNIFORM.value,
         required=False,
         type=str,
         choices=[v.value for v in PrototypeVersion],

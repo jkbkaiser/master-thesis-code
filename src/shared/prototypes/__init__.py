@@ -13,7 +13,7 @@ class PrototypeVersion(str, Enum):
     AVG_GENUS  = "avg_genus"
     DISTORTION  = "distortion"
     ENTAILMENT_CONES = "entailment_cones"
-    SPECIES_HYPERSPHERE_UNIFORM = "species_hypersphere_uniform"
+    HYPERSPHERE_UNIFORM = "hypersphere_uniform"
     SPECIES_HYPERSPHERE = "species_hypersphere"
 
 
@@ -21,8 +21,8 @@ def get_prototypes(prototype_version, dataset_version, dimensionality):
     prototype_path = Path("./prototypes") / dataset_version / prototype_version / f"{dimensionality}.npy"
     prototypes = torch.from_numpy(np.load(prototype_path)).float().to(DEVICE)
 
-    if prototype_version in [PrototypeVersion.SPECIES_HYPERSPHERE.value]:
-        c = 3
+    if prototype_version in [PrototypeVersion.AVG_GENUS]:
+        c = 1.5
         prototypes = (prototypes * 0.95) / math.sqrt(c)
 
     return prototypes
