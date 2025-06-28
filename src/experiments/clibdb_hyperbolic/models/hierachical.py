@@ -57,7 +57,7 @@ class HierarchicalPoincare(nn.Module):
 
     def _split_prototypes(self, prototypes, level_sizes):
         splits = torch.split(prototypes, level_sizes, dim=0)
-        return splits  # List of tensors per level
+        return list(splits)  # List of tensors per level
 
     def forward(self, x):
         features = self.model(x)

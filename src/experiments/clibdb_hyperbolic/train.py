@@ -15,7 +15,7 @@ load_dotenv()
 MLFLOW_SERVER = os.environ["MLFLOW_SERVER"]
 CHECKPOINT_DIR = os.environ["CHECKPOINT_DIR"]
 
-def get_model_architecture(model, ds: ClibdbDataset):
+def get_model_architecture(ds: ClibdbDataset):
     return ds.labelcount_per_level
 
 def parse_args():
@@ -37,14 +37,14 @@ def parse_args():
         choices=[v.value for v in DatasetVersion],
     )
 
-    parser.add_argument(
-        "-m",
-        "--model",
-        default="hac",
-        required=False,
-        type=str,
-        choices=["hac", "plc", "mplc", "marg"],
-    )
+    # parser.add_argument(
+    #     "-m",
+    #     "--model",
+    #     default="hac",
+    #     required=False,
+    #     type=str,
+    #     choices=["hac", "plc", "mplc", "marg"],
+    # )
 
     parser.add_argument(
         "--backbone",
@@ -104,7 +104,7 @@ def parse_args():
 def run(args):
     ds = ClibdbDataset(args.dataset)
     ds.load(batch_size=args.batch_size, use_torch=True, reload=args.reload)
-    architecture = get_model_architecture(args.model, ds)
+    architecture = get_model_architecture(ds)
 
     mlf_logger = MLFlowLogger(
         experiment_name=args.experiment_name,
@@ -113,7 +113,7 @@ def run(args):
     )
 
     general_hparams = {
-        "model_name": args.model,
+        # "model_name": args.model,
         "optim_name": args.optimizer,
         "batch_size": args.batch_size,
         "dataset": args.dataset.value,
@@ -127,13 +127,12 @@ def run(args):
         "freeze_backbone": args.freeze_backbone,
     }
 
-    if args.model == "mplc":
-        model_hparams.update({"warmup": args.mplc_warmup})
+    # if args.model == "mplc":
+    #     model_hparams.update({"warmup": args.mplc_warmup})
 
     optim_hparams = {"lr": args.learning_rate, "weight_decay": args.weight_decay}
 
     model = LightningGBIF(
-        model_name=args.model,
         model_hparams=model_hparams,
         optimizer_name=args.optimizer,
         optimizer_hparams=optim_hparams,

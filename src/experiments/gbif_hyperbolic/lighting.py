@@ -39,6 +39,7 @@ BACKBONE_DICT = {
 
 def create_model(model_name, model_hparams, ds):
     prototypes = get_prototypes(model_hparams["prototypes"], ds.version.value, model_hparams["prototype_dim"])
+    print("Intializing prototypes")
     model_hparams["prototypes"] = prototypes
 
     if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS]:

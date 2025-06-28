@@ -15,7 +15,7 @@ from src.constants import CACHE_DIR, GOOGLE_BUCKET_URL, NUM_PROC
 
 class DatasetSplit(str, Enum):
     TRAIN = "train"
-    VALID = "valid"
+    VALID = "validation"
     TEST = "test"
 
 
@@ -221,7 +221,7 @@ class Dataset():
 
 
 
-class CustomDataset(data.Dataset):
+class ClibdbCustomDataset(data.Dataset):
     def __init__(self, data, transform, use_torch=False):
         self.data = data
         self.transform = transform
@@ -293,7 +293,7 @@ class ClibdbDataset():
 
         print("Setting up dataloaders")
 
-        # self.train_dataloader = self._get_dataloader(DatasetSplit.TRAIN)
+        self.train_dataloader = self._get_dataloader(DatasetSplit.TRAIN)
         self.valid_dataloader = self._get_dataloader(DatasetSplit.VALID)
         self.test_dataloader = self._get_dataloader(DatasetSplit.TEST)
 
@@ -335,7 +335,7 @@ class ClibdbDataset():
         )
 
         transform = self._image_to_tensor if split != DatasetSplit.TRAIN else self._image_to_tensor_train
-        dataset = CustomDataset(dataset, transform=transform, use_torch=self.use_torch)
+        dataset = ClibdbCustomDataset(dataset, transform=transform, use_torch=self.use_torch)
 
         dataloader = data.DataLoader(
             dataset,

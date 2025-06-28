@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import uuid
 
 import datasets
@@ -40,7 +41,7 @@ def get_hierarchy(dataset_version, reload: bool = False):
 
 # Define directory for saving results and images
 # prototype_name = "entailment_cones"  # Example prototype name, adjust as needed
-prototype_name = "avg_multi"  # Example prototype name, adjust as needed
+prototype_name = "entailment_cones"  # Example prototype name, adjust as needed
 dimensionality = 128  # Example dimensionality, adjust as needed
 
 # Create directory named after the prototype and dimensionality
@@ -59,23 +60,125 @@ prototypes = np.load(f"./prototypes/clibdb/{prototype_name}/{dimensionality}.npy
 # prototypes = prototypes * 0.95 / 3
 prototypes_t = torch.tensor(prototypes)
 
+ball = geoopt.PoincareBallExact(c=1.5)
+
 print("prototypes_shape", prototypes.shape)
 
-
 level_names = ["class", "order", "family", "subfamily", "genus", "species"]
+level_sizes = [level.shape[0] for level in hierarchy_levels]
+level_sizes.append(hierarchy_levels[-1].shape[1])
 
-level_sizes = [level.shape[0] for level in hierarchy_levels]  # e.g., [class, order, family, ..., genus, species]
-
+# Compute offsets for slicing
 offsets = [0]
-for size in level_sizes[:-1]:
+for size in level_sizes:
     offsets.append(offsets[-1] + size)
 
-# Print average norm for each level
-for i, (name, start) in enumerate(zip(level_names, offsets)):
-    end = offsets[i + 1] if i + 1 < len(offsets) else len(prototypes_t)
+print(len(offsets), len(level_names), len(level_sizes))
+
+# Compute Euclidean norms
+print("Euclidean norms:")
+for i, name in enumerate(level_names):
+    start, end = offsets[i], offsets[i + 1]
     level_protos = prototypes_t[start:end]
-    avg_norm = level_protos.norm(dim=1).mean().item()
-    print(f"{name.title():<10}: {avg_norm:.4f}")
+    norms = level_protos.norm(dim=1)
+    print(f"{name.title():<10}: avg: {norms.mean():.4f} min: {norms.min():.4f} max: {norms.max():.4f}")
+
+print("\nHyperbolic norms:")
+hyperbolic_norms = []
+per_level_norms = {}
+
+for i, name in enumerate(level_names):
+    start, end = offsets[i], offsets[i + 1]
+    level_protos = prototypes_t[start:end]
+    dists = ball.dist0(level_protos)
+    per_level_norms[name] = dists.detach().cpu().numpy()
+    hyperbolic_norms.append(dists)
+    print(f"{name.title():<10}: mean: {dists.mean():.4f} min: {dists.min():.4f} max: {dists.max():.4f}")
+
+# Plot per-level histogram
+plt.figure(figsize=(10, 6))
+for name, norms in per_level_norms.items():
+    plt.hist(norms, bins=30, alpha=0.5, label=name)
+
+# plt.xscale("log")
+# plt.yscale("log")
+
+plt.xlabel("Hyperbolic Norm (distance to origin)")
+plt.ylabel("Frequency")
+plt.title("Distribution of Hyperbolic Norms per Taxonomic Level")
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.savefig(os.path.join(output_dir, "poincare_norm_distribution_per_level.png"))
+plt.show()
+
+# Plot total histogram
+all_norms = torch.cat(hyperbolic_norms).cpu().numpy()
+
+plt.figure(figsize=(8, 5))
+
+# plt.xscale("log")
+# plt.yscale("log")
+
+plt.hist(all_norms, bins=50, color="gray", edgecolor="black", alpha=0.8)
+plt.xlabel("Hyperbolic Norm (distance to origin)")
+plt.ylabel("Frequency")
+plt.title("Overall Distribution of Hyperbolic Norms")
+plt.grid(True)
+plt.tight_layout()
+plt.savefig(os.path.join(output_dir, "poincare_norm_distribution_total.png"))
+plt.show()
+
+# Compute the t-SNE projection for visualization
+proj = TSNE(n_components=2).fit_transform(prototypes)
+proj -= proj.min(axis=0)
+proj /= proj.max(axis=0)
+proj = proj * 2 - 1
+
+
+def random_walk_branch(hierarchy_levels, offsets, level_names):
+    indices_in_branch = []
+
+    # Start by randomly picking a root node at level 0
+    num_root_nodes = hierarchy_levels[0].shape[1]
+    current_parent = np.random.randint(0, num_root_nodes)
+    indices_in_branch.append(current_parent + offsets[0])
+
+    for level in range(len(hierarchy_levels)):
+        H = hierarchy_levels[level]  # shape (n_children, n_parents)
+
+        # Find children of current_parent
+        children = np.where(H[:, current_parent] == 1)[0]
+        if len(children) == 0:
+            break  # End path early if no children
+
+        current_child = np.random.choice(children)
+        indices_in_branch.append(current_child + offsets[level + 1])
+
+        current_parent = current_child
+
+    return indices_in_branch
+
+# Run the function
+indices_in_branch = random_walk_branch(hierarchy_levels, offsets, level_names)
+
+if indices_in_branch is None:
+    print("Failed to find full path after retries.")
+else:
+    branch_coords = proj[indices_in_branch]
+    plt.figure(figsize=(6, 6))
+    plt.plot(branch_coords[:, 0], branch_coords[:, 1], marker='o', linestyle='-', linewidth=2)
+
+    for i, idx in enumerate(indices_in_branch):
+        label = level_names[i] if i < len(level_names) else f"Level {i}"
+        plt.text(branch_coords[i, 0], branch_coords[i, 1], label, fontsize=10, ha='right', va='bottom')
+
+    plt.title("Full Taxonomic Branch in t-SNE Projection")
+    plt.grid(True)
+    plt.axis('equal')
+    plt.tight_layout()
+    plt.show()
+
 
 # # Step 4: Slice out genus and species prototypes
 # genus_prototypes = prototypes_t[genus_start:species_start]
@@ -116,28 +219,7 @@ for i, (name, start) in enumerate(zip(level_names, offsets)):
 #     file.write(f"Mean Norm: {mean_genus_norm:.4f}\n")
 #     file.write(f"Max Norm: {max_genus_norm:.4f}\n")
 #     file.write(f"Min Norm: {min_genus_norm:.4f}\n")
-#
-# # Plot histograms of norms for species and genus separately
-# plt.hist(species_norms.numpy(), bins=20, color='skyblue', edgecolor='black')
-# plt.title("Species Norms Histogram")
-# plt.xlabel("Norm")
-# plt.ylabel("Frequency")
-# plt.savefig(os.path.join(output_dir, "species_norms_histogram.png"))
-# plt.close()
-#
-# plt.hist(genus_norms.numpy(), bins=20, color='orange', edgecolor='black')
-# plt.title("Genus Norms Histogram")
-# plt.xlabel("Norm")
-# plt.ylabel("Frequency")
-# plt.savefig(os.path.join(output_dir, "genus_norms_histogram.png"))
-# plt.close()
-#
-# # Continue with the rest of the original code for distance calculations and statistics
-#
-# # Create GeoOpt Poincaré Ball instance
-# c = 3
-# ball = geoopt.PoincareBallExact(c=c)
-#
+
 # # Initialize lists to store distances
 # within_genus_distances_euclidean = []
 # within_genus_distances_poincare = []

@@ -117,8 +117,8 @@ def compute_hierarchical_prototypes(leaf_prototypes, hierarchy_levels, scale_bas
 #     return torch.cat(all_prototypes[::-1], dim=0)
 
 def run(args):
-    ds = Dataset(args.dataset)
-    # ds = ClibdbDataset(args.dataset)
+    # ds = Dataset(args.dataset)
+    ds = ClibdbDataset(args.dataset)
     ds.load(batch_size=args.batch_size, use_torch=True, reload=args.reload)
 
     hierarchy_levels = [torch.tensor(h).to(DEVICE) for h in ds.hierarchy]  # e.g. [G←S, F←G, ...]
@@ -237,7 +237,7 @@ def parse_args():
     parser.add_argument('--lr', dest="learning_rate", default=1, type=float)
     parser.add_argument("--reload", action="store_true", default=False, required=False)
     parser.add_argument('--momentum', dest="momentum", default=0.9, type=float)
-    parser.add_argument('--epochs', dest="epochs", default=1000, type=int,)
+    parser.add_argument('--epochs', dest="epochs", default=10000, type=int,)
     parser.add_argument('--resdir', default="./prototypes", type=Path)
     return parser.parse_args()
 

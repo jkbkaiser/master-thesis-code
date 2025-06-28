@@ -24,7 +24,7 @@ BACKBONE_DICT = {
 torch.set_float32_matmul_precision("medium")
 
 
-def create_model(model_name, model_hparams, ds):
+def create_model(model_hparams, ds):
     prototypes = get_prototypes(model_hparams["prototypes"], ds.version.value, 128)
     model_hparams["prototypes"] = prototypes
 
@@ -69,7 +69,6 @@ def create_model(model_name, model_hparams, ds):
 class LightningGBIF(L.LightningModule):
     def __init__(
         self,
-        model_name,
         model_hparams,
         optimizer_name,
         optimizer_hparams,
@@ -80,7 +79,7 @@ class LightningGBIF(L.LightningModule):
         self.optimizer_name = optimizer_name
         self.optimizer_hparams = optimizer_hparams
 
-        self.model = create_model(model_name, model_hparams, ds)
+        self.model = create_model(model_hparams, ds)
         self.pred_fn = self.model.pred_fn
         self.loss_fn = self.model.loss_fn
 
@@ -145,3 +144,10 @@ class LightningGBIF(L.LightningModule):
 
         lca = self.metric.compute_lca_stats()
         self.log_epoch(lca, "valid_")
+
+    # def on_load_checkpoint(self, checkpoint):
+    #     # Reconstruct list of level prototypes from registered buffers
+    #     num_levels = len(self.model.level_sizes)
+    #     self.model.level_prototypes = [
+    #         getattr(self.model, f"level_{i}_prototypes") for i in range(num_levels)
+    #     ]

@@ -156,7 +156,7 @@ def run(args):
 
     lr = 1.0
     burn_in_lr_mult = 1 / 10
-    epochs = 100
+    epochs = 20
     burn_in_epochs = 10
     momentum = 0.9
     weight_decay = 0.0005

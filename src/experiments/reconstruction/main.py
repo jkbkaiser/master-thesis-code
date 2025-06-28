@@ -172,7 +172,7 @@ def run(args):
         ball=ball,
     )
 
-    prototypes = get_prototypes(PrototypeVersion.AVG_MULTI.value, args.dataset.value, args.dims)
+    prototypes = get_prototypes(PrototypeVersion.DISTORTION.value, args.dataset.value, args.dims)
 
     print(prototypes.shape)
 

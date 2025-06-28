@@ -15,22 +15,32 @@ experiment = mlflow.get_experiment_by_name(experiment_name)
 if experiment is None:
     raise ValueError(f"Experiment '{experiment_name}' not found.")
 
+# run_ids_to_compare = [
+#     # "86fab3a2574843c592a9e3e783452ca4",
+#     "8115459ea38545378430c491c8de53dd",
+#     "423d8e5d629f4ef0acc5fdd2b6b1c013",
+#     "dd0caaa80d14416b8a3e094cfaad4916",
+# ]
+
 run_ids_to_compare = [
-    # "86fab3a2574843c592a9e3e783452ca4",
-    "8115459ea38545378430c491c8de53dd",
-    "423d8e5d629f4ef0acc5fdd2b6b1c013",
-    "dd0caaa80d14416b8a3e094cfaad4916",
+    "e8ef4cc6785547d88c2cc04ec6470e0d",
+    "3be829d7736f4825bf4660474078d801",
+    "f973eec0a8a94e998ff414fd2d5f7cd6",
+    "3e3fd198ae4b457ea329d0931961a671",
+    "9bd0a8062061402fb37c632c34ff5cd2",
 ]
 
 frequencies = ["10", "50", "100", "all"]
-metric_prefix = "valid_recall_species_support_weighted_recall"
+# metric_prefix = "valid_recall_species_support_weighted_recall"
+metric_prefix = "valid_recall_species_macro_recall"
 
 records = []
 for run_id in run_ids_to_compare:
     try:
         run = mlflow.get_run(run_id)
+        print(run)
         run_name = run.data.tags.get("mlflow.runName", run_id)
-        model_name = run.data.params.get("model_name", "unknown")
+        model_name = run.data.params.get("prototypes", run.data.params.get("model_name", "unknown"))
 
         for freq in frequencies:
             metric_key = f"{metric_prefix}_{freq}"
@@ -38,7 +48,7 @@ for run_id in run_ids_to_compare:
             if value is not None:
                 records.append({
                     "Run Name": run_name,
-                    "Model Name": model_name.upper(),
+                    "Model Name": model_name.lower(),
                     "Frequency": freq,
                     "Recall": value
                 })
