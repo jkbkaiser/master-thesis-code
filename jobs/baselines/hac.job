@@ -1,11 +1,11 @@
 #!/bin/bash
 
-#SBATCH --partition=gpu_mig
+#SBATCH --partition=gpu_a100
 #SBATCH --gpus=1
 #SBATCH --job-name=HAC
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=9
-#SBATCH --time=12:00:00
+#SBATCH --time=20:00:00
 #SBATCH --output=./logs/job_outputs/slurm_output_%A.out
 
 module purge
@@ -18,6 +18,7 @@ python -m src.experiments.gbif_baselines.train \
     -d gbif_coleoptera_hierarchical_full \
     -m hac \
     -lr 1e-4 \
+    --backbone vitaev2 \
     --weight-decay 0.02 \
     --num-epochs 10 \
     --batch-size 64 \

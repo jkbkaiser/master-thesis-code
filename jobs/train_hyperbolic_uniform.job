@@ -1,11 +1,11 @@
 #!/bin/bash
 
-#SBATCH --partition=gpu_mig
+#SBATCH --partition=gpu_a100
 #SBATCH --gpus=1
 #SBATCH --job-name=TrainPLC
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=9
-#SBATCH --time=15:00:00
+#SBATCH --time=20:00:00
 #SBATCH --output=./logs/job_outputs/slurm_output_%A.out
 
 module purge
@@ -19,9 +19,10 @@ python -m src.experiments.gbif_hyperbolic.train \
     -d gbif_coleoptera_hierarchical_full \
     --weight-decay 0.02 \
     --learning-rate 0.0001 \
+    --backbone vitaev2 \
     --backbone-learning-rate 0.0001 \
     --prototype_dim 128 \
-    --prototypes species_hypersphere \
+    --prototypes hypersphere_uniform \
     --num-epochs 15 \
     --batch-size 64 \
     --temp 0.07 \
