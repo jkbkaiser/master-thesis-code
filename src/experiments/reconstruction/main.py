@@ -3,22 +3,29 @@ import json
 import os
 import uuid
 from pathlib import Path
+from re import DEBUG
 
 import mlflow
 import networkx as nx
 import numpy as np
 import requests
+import torch
 from dotenv import load_dotenv
-from geoopt import PoincareBallExact
+from geoopt import ManifoldParameter, ManifoldTensor, PoincareBallExact
 from geoopt.optim import RiemannianSGD
 from torch.utils.data import DataLoader
 
-from src.constants import CACHE_DIR, GOOGLE_BUCKET_URL
+from src.constants import CACHE_DIR, DEVICE, GOOGLE_BUCKET_URL
+from src.experiments.gbif_hyperbolic.prototypes.embeddings.base import \
+    BaseEmbedding
 from src.experiments.gbif_hyperbolic.prototypes.embeddings.entailment_cones import \
     EntailmentConeEmbedding
+from src.experiments.gbif_hyperbolic.prototypes.embeddings.poincare_embedding import \
+    PoincareEmbedding
 from src.experiments.gbif_hyperbolic.prototypes.utils.hierarchy_embedding_dataset import \
     HierarchyEmbeddingDataset
 from src.shared.datasets import DatasetVersion
+from src.shared.prototypes import PrototypeVersion, get_prototypes
 
 load_dotenv()
 
@@ -111,6 +118,15 @@ def get_metadata(dataset_version, reload: bool = False):
         return json.load(f)
 
 
+def compute_map_score(dists: torch.Tensor):
+    ranks = torch.argsort(dists, dim=1)
+    pos_ranks = (ranks == 0).nonzero(as_tuple=False)[:, 1]
+    ap = 1.0 / (pos_ranks + 1).float()
+
+    return ap.mean().item(), pos_ranks.float().mean().item()
+
+
+
 def run(args):
     hierarchy = get_hierarchy(args.dataset)
     metadata = get_metadata(args.dataset)
@@ -132,7 +148,7 @@ def run(args):
     print("Node count:", len(graph.nodes))
 
     mlflow.set_tracking_uri(MLFLOW_SERVER)
-    mlflow.set_experiment("prototypes")
+    mlflow.set_experiment("reconstruction")
 
     dataset = HierarchyEmbeddingDataset(
         hierarchy=graph,
@@ -150,69 +166,60 @@ def run(args):
     )
 
     ball = PoincareBallExact(c=args.curvature)
-    model = EntailmentConeEmbedding(
+    model = PoincareEmbedding(
         num_embeddings=len(graph.nodes),
         embedding_dim=args.dims,
         ball=ball,
     )
 
-    lr = 1
-    burn_in_lr_mult = 1 / 10
-    epochs = 500
-    burn_in_epochs = 10
-    momentum = 0.9
-    weight_decay = 0.0005
+    prototypes = get_prototypes(PrototypeVersion.AVG_MULTI.value, args.dataset.value, args.dims)
 
-    optimizer = RiemannianSGD(
-        params=model.parameters(),
-        lr=lr,
-        momentum=momentum,
-        dampening=0,
-        weight_decay=weight_decay,
-        nesterov=True,
-        stabilize=500
+    print(prototypes.shape)
+
+    model.weight = ManifoldParameter(
+        data=ManifoldTensor(prototypes, manifold=ball).to(DEVICE)
     )
 
-    with mlflow.start_run():
-        mlflow.log_params({
-            "nodes": len(graph.nodes),
-            "type": "entailment_cone",
-            "entailment_lr": lr,
-            "entailment_epochs": epochs,
-            "entailment_burn_in_lr_mult": burn_in_lr_mult,
-            "entailment_burn_in_epochs": burn_in_epochs,
-            "entailment_momentum": momentum,
-            "entailment_weight_decay": weight_decay,
-            "entailment_optimizer": "riemannian sgd",
-            "curvature": args.curvature,
-        })
+    mean_map = 0
+    mean_rank = 0
+    i = 0
 
-        model.train_model(
-            dataloader=dataloader,
-            epochs=epochs,
-            optimizer=optimizer,
-            burn_in_epochs=burn_in_epochs,
-            burn_in_lr_mult=burn_in_lr_mult,
-            store_losses=True,
-        )
+    while i < 1000:
+        for batch in dataloader:
+            edges = batch["edges"].to(model.weight.device)
+            mask = batch["mask"].to(model.weight.device)
+            edge_label_targets = batch["edge_label_targets"].to(model.weight.device)
 
-    base = Path(f"./prototypes/{args.dataset}/entailment_cones")
+            dists = model(edges)
 
-    if not base.is_dir():
-        base.mkdir(parents=True)
+            # source = edges[:,:,0]
+            # dest = edges[:,:,1]
+            #
+            # source_prototypes = model(source)
+            # dest_prototypes = model(dest)
+            #
+            # dists = ball.dist(source_prototypes, dest_prototypes)
+            map, mrank = compute_map_score(dists)
 
-    print(model.weight.data.cpu().numpy().shape)
+            mean_map += map
+            mean_rank += mrank
 
-    path = f"{base}/{args.dims}.npy"
-    print(path)
-    np.save(path, model.weight.data.cpu().numpy())
+            i += 1
+
+            if i >= 1000:
+                break
+
+    print(i)
+    print(mean_map / i)
+    print(mean_rank / i)
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
         prog="Hyperbolic embeddings",
         description="Training script for embedding genus and species in hyperbolic space",
     )
-    parser.add_argument("--batch-size", default=256, required=False, type=int)
+    parser.add_argument("--batch-size", default=16, required=False, type=int)
     parser.add_argument(
         "-d",
         "--dataset",
@@ -220,18 +227,9 @@ def parse_args():
         type=DatasetVersion,
         choices=[v.value for v in DatasetVersion],
     )
-    parser.add_argument(
-        "--dims",
-        default=2,
-        required=True,
-        type=int,
-    )
-    parser.add_argument('--lr', dest="learning_rate", default=0.1, type=float)
-    parser.add_argument("--reload", action="store_true", default=False, required=False)
-    parser.add_argument('--momentum', dest="momentum", default=0.9, type=float)
-    parser.add_argument('--epochs', dest="epochs", default=10000, type=int,)
-    parser.add_argument('--resdir', default="./prototypes", type=Path)
-    parser.add_argument("--curvature", default=3., required=False, type=float)
+    parser.add_argument('--curvature', default=1.5, type=float)
+    parser.add_argument('--dims', default=128, type=int)
+
     return parser.parse_args()
 
 

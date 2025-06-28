@@ -15,9 +15,9 @@ from src.shared.datasets import DatasetVersion
 
 RANKS = ["class", "order", "family", "subfamily", "genus", "species"]
 
-HUGGING_FACE_SOURCE_DATASET = "jkbkaiser/clibd-raw"
+HUGGING_FACE_SOURCE_DATASET = "jkbkaiser/clibd-raw-unseen"
 
-VERSION = DatasetVersion.CLIBDB
+VERSION = DatasetVersion.CLIBDB_UNSEEN
 HUGGING_FACE_PROCESSED_GENUS_SPECIES_DATASET = f"jkbkaiser/{VERSION.value}"
 
 DATA_DIR = Path("./data")

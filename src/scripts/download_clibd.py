@@ -43,31 +43,31 @@ def bioscan_clibd_dataset(metadata_path, image_root, split_file):
     return Dataset.from_pandas(df).cast(features)
 
 
-train_ds = bioscan_clibd_dataset(
-    metadata_path="/home/jex/Datasets/bioscan/bioscan1m/BIOSCAN_Insect_Dataset_metadata.tsv",
-    image_root="/home/jex/Datasets/bioscan/bioscan1m/images/cropped_256",
-    split_file="/home/jex/Datasets/bioscan/bioscan1m/CLIBD_partitioning/train_seen.txt"
-)
+# train_ds = bioscan_clibd_dataset(
+#     metadata_path="/home/jex/Datasets/bioscan/bioscan1m/BIOSCAN_Insect_Dataset_metadata.tsv",
+#     image_root="/home/jex/Datasets/bioscan/bioscan1m/images/cropped_256",
+#     split_file="/home/jex/Datasets/bioscan/bioscan1m/CLIBD_partitioning/test_unseen.txt"
+# )
 
 val_ds = bioscan_clibd_dataset(
     metadata_path="/home/jex/Datasets/bioscan/bioscan1m/BIOSCAN_Insect_Dataset_metadata.tsv",
     image_root="/home/jex/Datasets/bioscan/bioscan1m/images/cropped_256",
-    split_file="/home/jex/Datasets/bioscan/bioscan1m/CLIBD_partitioning/val_seen.txt"
+    split_file="/home/jex/Datasets/bioscan/bioscan1m/CLIBD_partitioning/val_unseen.txt"
 )
 
 test_ds = bioscan_clibd_dataset(
     metadata_path="/home/jex/Datasets/bioscan/bioscan1m/BIOSCAN_Insect_Dataset_metadata.tsv",
     image_root="/home/jex/Datasets/bioscan/bioscan1m/images/cropped_256",
-    split_file="/home/jex/Datasets/bioscan/bioscan1m/CLIBD_partitioning/test_seen.txt"
+    split_file="/home/jex/Datasets/bioscan/bioscan1m/CLIBD_partitioning/test_unseen.txt"
 )
 
 bioscan_dataset = DatasetDict({
-    "train": train_ds,
+    # "train": train_ds,
     "validation": val_ds,
     "test": test_ds
 })
 
 bioscan_dataset.push_to_hub(
-    "jkbkaiser/clibd-raw",
+    "jkbkaiser/clibd-raw-unseen",
     private=True
 )

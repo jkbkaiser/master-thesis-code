@@ -154,9 +154,9 @@ def run(args):
         ball=ball,
     )
 
-    lr = 0.1
+    lr = 1.0
     burn_in_lr_mult = 1 / 10
-    epochs = 1000
+    epochs = 100
     burn_in_epochs = 10
     momentum = 0.9
     weight_decay = 0.0005

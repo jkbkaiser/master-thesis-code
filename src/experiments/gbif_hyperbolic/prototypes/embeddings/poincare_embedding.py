@@ -110,7 +110,7 @@ class PoincareEmbedding(BaseEmbedding):
 
                 poincare_loss = poincare_embeddings_loss(dists=dists, targets=edge_label_targets, mask=mask)
 
-                repulsion_l = tangent_space_repulsion_loss(self.weight, self.ball) * get_repulsion_weight(epoch)
+                repulsion_l = tangent_space_repulsion_loss(self.weight, self.ball) * get_repulsion_weight(epoch) * 0
 
                 loss = poincare_loss + repulsion_l
 
