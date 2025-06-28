@@ -229,7 +229,7 @@ def parse_args():
     parser.add_argument('--momentum', dest="momentum", default=0.9, type=float)
     parser.add_argument('--epochs', dest="epochs", default=10000, type=int,)
     parser.add_argument('--resdir', default="./prototypes", type=Path)
-    parser.add_argument("--curvature", default=3., required=False, type=float)
+    parser.add_argument("--curvature", default=1.5, required=False, type=float)
     return parser.parse_args()
 
 

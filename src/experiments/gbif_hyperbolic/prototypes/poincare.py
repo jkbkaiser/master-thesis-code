@@ -213,7 +213,7 @@ def parse_args():
         prog="Hyperbolic embeddings",
         description="Training script for embedding genus and species in hyperbolic space",
     )
-    parser.add_argument("--curvature", default=3., required=False, type=float)
+    parser.add_argument("--curvature", default=1.5, required=False, type=float)
     parser.add_argument("--batch-size", default=256, required=False, type=int)
     parser.add_argument(
         "-d",

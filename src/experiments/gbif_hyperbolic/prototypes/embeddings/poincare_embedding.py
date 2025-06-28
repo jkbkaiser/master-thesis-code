@@ -1,7 +1,6 @@
 from typing import Optional
 
 import mlflow
-import numpy as np
 import torch
 from geoopt.manifolds import PoincareBallExact
 from torch.optim import Optimizer
