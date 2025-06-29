@@ -1,5 +1,6 @@
-import geoopt
+import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class Mlp(nn.Module):
@@ -34,7 +35,7 @@ class ClassifierModule(nn.Module):
         return [classifier(features) for classifier in self.classifiers]
 
 
-class GenusSpeciesEucldiean(nn.Module):
+class GenusSpeciesEuclidean(nn.Module):
     def __init__(self, backbone, out_features, architecture, prototypes, prototype_dim, temp, **_):
         super().__init__()
 
@@ -44,36 +45,33 @@ class GenusSpeciesEucldiean(nn.Module):
         else:
             self.model = Mlp(out_features, 256, prototypes.shape[1])
 
-        c = 1.5
-
-        self.ball = geoopt.PoincareBallExact(c=c)
         self.prototypes = prototypes
-
         [self.num_genus, self.num_species] = architecture
         self.genus_prototypes = self.prototypes[:self.num_genus]
-        self.species_protypes = self.prototypes[self.num_genus:]
+        self.species_prototypes = self.prototypes[self.num_genus:]
 
         self.temp = temp
         self.criterion = nn.CrossEntropyLoss()
 
     def forward(self, x):
-        [feature_euc_genus, feature_euc_species] = self.model(x)
-        feature_hyp_genus = self.ball.expmap0(feature_euc_genus)
-        feature_hyp_species = self.ball.expmap0(feature_euc_species)
+        [feature_genus, feature_species] = self.model(x)
+
+        # Euclidean distance to each prototype
+        dists_genus = torch.cdist(feature_genus, self.genus_prototypes)  # [B, num_genus]
+        dists_species = torch.cdist(feature_species, self.species_prototypes)  # [B, num_species]
 
         return [
-            -self.ball.dist(self.genus_prototypes[None, :, :], feature_hyp_genus[:, None, :]) / self.temp,
-            -self.ball.dist(self.species_protypes[None, :, :], feature_hyp_species[:, None, :]) / self.temp
+            -dists_genus / self.temp,
+            -dists_species / self.temp,
         ]
 
     def pred_fn(self, logits):
-        [genus_logits, species_logits] = logits
+        genus_logits, species_logits = logits
         return genus_logits.argmax(dim=1), species_logits.argmax(dim=1)
 
     def loss_fn(self, logits, genus_labels, species_labels):
-        [genus_logits, species_logits] = logits
-
+        genus_logits, species_logits = logits
         ce_loss_genus = self.criterion(genus_logits, genus_labels)
         ce_loss_species = self.criterion(species_logits, species_labels)
-
         return 0.3 * ce_loss_genus + 0.7 * ce_loss_species
+
