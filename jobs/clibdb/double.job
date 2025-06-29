@@ -5,7 +5,7 @@
 #SBATCH --job-name=TrainPLC
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=9
-#SBATCH --time=01:30:00
+#SBATCH --time=15:00:00
 #SBATCH --output=./logs/job_outputs/slurm_output_%A.out
 
 module purge
@@ -14,9 +14,13 @@ module load 2024
 source .env
 source .venv/bin/activate
 
-python -m src.experiments.gbif_hyperbolic.evaluation.main \
-    --n_shot 5 \
-    --n_way 1 \
-    --n_query 15 \
-    --run_id ff72d8ced7aa4b7e93ca964e2cc07c48 \
-    --prototypes avg_multi
+python -m src.experiments.clibdb_hyperbolic.train \
+    -d clibdb \
+    --weight-decay 0.02 \
+    --learning-rate 0.0001 \
+    --prototypes distortion \
+    --num-epochs 20 \
+    --batch-size 64
+
+
+    # --backbone vitaev2 \
