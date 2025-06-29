@@ -1,12 +1,24 @@
 import ast
 import os
+import random
+import uuid
+from collections import defaultdict
+from pathlib import Path
 
-import lightning as L
+import datasets
 import mlflow
+import numpy as np
+import requests
+import torch
+import torchvision.transforms as transforms
+import tqdm
+from datasets import Dataset
 from dotenv import load_dotenv
+from geoopt import PoincareBallExact
 
+from src.constants import CACHE_DIR, DEVICE, GOOGLE_BUCKET_URL
 from src.experiments.clibdb_hyperbolic.lighting import LightningGBIF
-from src.shared.datasets import ClibdbDataset, Dataset, DatasetVersion
+from src.shared.datasets import ClibdbDataset, DatasetVersion
 
 load_dotenv()
 
@@ -16,70 +28,207 @@ CHECKPOINT_DIR = os.environ["CHECKPOINT_DIR"]
 mlflow.set_tracking_uri(MLFLOW_SERVER)
 client = mlflow.tracking.MlflowClient()
 
-run_id = "f1c9fbb2f05c4bb6904354eaa773abab"
-prototypes = "genus_species_poincare"
+transform = transforms.Compose([
+    transforms.Resize(256),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
 
-artifacts = mlflow.artifacts.list_artifacts(run_id=run_id)
+def sample_few_shot_task(dataset: Dataset, label_field: str, n_way: int, n_shot: int, n_query: int):
+    class_to_samples = defaultdict(list)
+    for example in dataset:
+        class_to_samples[example[label_field]].append(example)
 
-for artifact in artifacts:
-    print(artifact.path)
+    # Filter to classes with enough samples
+    eligible_classes = [cls for cls, samples in class_to_samples.items() if len(samples) >= n_shot + n_query]
+    chosen_classes = random.sample(eligible_classes, n_way)
 
-artifact_path = "epoch=0/epoch=0.ckpt"
+    support, query = [], []
+    for cls in chosen_classes:
+        examples = random.sample(class_to_samples[cls], n_shot + n_query)
+        for example in examples:
+            image_tensor = transform(example["image"])
+            example["image"] = image_tensor
 
-local_ckpt_path = mlflow.artifacts.download_artifacts(
-    run_id=run_id,
-    artifact_path=artifact_path
-)
+        support.extend(examples[:n_shot])
+        query.extend(examples[n_shot:])
 
-print(local_ckpt_path)
+    return support, query
 
-import torch
 
-ckpt = torch.load(local_ckpt_path, map_location="cpu")
-print(ckpt["state_dict"].keys())
+def compute_prototypes(model, support_set, label_field: str, ball: PoincareBallExact):
+    label_to_embeddings = defaultdict(list)
 
-run = client.get_run(run_id)
+    for item in support_set:
+        image = item['image'].to(DEVICE)
+        label = item[label_field]
+        with torch.no_grad():
+            embedding = model.embed(image.unsqueeze(0))[-1]  # (1, D)
+            # print(embedding.shape)
+        label_to_embeddings[label].append(embedding.squeeze(0))  # remove batch dim
 
-params = run.data.params
+    # Compute hyperbolic (Einstein) midpoint
+    prototypes = {}
+    for label, embeds in label_to_embeddings.items():
+        embeds_tensor = torch.stack(embeds, dim=0)  # (n_shot, D)
+        weights = torch.ones(embeds_tensor.size(0), device=embeds_tensor.device)
+        midpoint = ball.weighted_midpoint(embeds_tensor, weights=weights)
+        prototypes[label] = midpoint
 
-ds = ClibdbDataset(DatasetVersion.CLIBDB)
-ds.load(batch_size=16, use_torch=True)
+    return prototypes  # Dict[label -> Tensor]
 
-# def get_model_architecture(model, ds: Dataset):
-#     if model in ["hyperbolic-genus-species", "single"]:
-#         return ds.labelcount_per_level
-#     else:
-#         return ds.labelcount_per_level[-1]
-#
-# architecture = get_model_architecture(params["model_name"], ds)
 
-architecture = ds.labelcount_per_level
+def load_model(run_id, prototypes):
+    artifact_path = "epoch=19/epoch=19.ckpt"
+    local_dir = Path("mlruns_cache") / run_id
+    local_ckpt_path = local_dir / artifact_path
 
-general_hparams = {
-    "machine": "local",
-    # "model_name": params["model_name"],
-    "batch_size": int(params["batch_size"]),
-    "dataset": params["dataset"],
-    "epochs": int(params["epochs"]),
-}
+    if not local_ckpt_path.exists():
+        print(f"Downloading checkpoint to: {local_ckpt_path}")
 
-model_hparams = {
-    "backbone_name": params["backbone_name"],
-    "freeze_backbone": params["freeze_backbone"],
-    "prototypes": prototypes,
-    # "prototype_dim": int(params["prototype_dim"]),
-    "architecture": ast.literal_eval(params["architecture"]),
-    # "temp": float(params["temp"]),
-}
+        local_dir.mkdir(parents=True, exist_ok=True)
+        mlflow.artifacts.download_artifacts(
+            run_id=run_id,
+            artifact_path=artifact_path,
+            dst_path=local_dir,
+        )
+    else:
+        print(f"Using cached checkpoint at: {local_ckpt_path}")
 
-model = LightningGBIF.load_from_checkpoint(
-    checkpoint_path=local_ckpt_path,
-    # model_name=params["model_name"],
-    model_hparams=model_hparams,
-    optimizer_name=None,
-    optimizer_hparams=None,
-    ds=ds,
-)
-trainer = L.Trainer(logger=True, enable_progress_bar=True)
+    run = client.get_run(run_id)
+    params = run.data.params
 
-trainer.validate(model, dataloaders=ds.test_dataloader)
+    model_hparams = {
+        "backbone_name": params["backbone_name"],
+        "freeze_backbone": params["freeze_backbone"],
+        "prototypes": prototypes,
+        "architecture": ast.literal_eval(params["architecture"]),
+    }
+
+    ds = ClibdbDataset(DatasetVersion.CLIBDB)
+    ds.load(batch_size=16, use_torch=True)
+
+    model = LightningGBIF.load_from_checkpoint(
+        checkpoint_path=local_ckpt_path,
+        model_hparams=model_hparams,
+        optimizer_name=None,
+        optimizer_hparams=None,
+        ds=ds,
+    ).to(DEVICE)
+    model.eval()
+
+    return model
+
+
+def get_hierarchy(dataset_version, reload: bool = False):
+    path = CACHE_DIR / f"{dataset_version}/hierarchy.npz"
+
+    if reload or not path.is_file():
+        url = f"{GOOGLE_BUCKET_URL}/{dataset_version}/hierarchy.npz?id={uuid.uuid4()}"
+        response = requests.get(url)
+
+        if response.status_code != 200:
+            raise Exception(f"Could not retrieve hierarchy for {dataset_version}")
+
+        with open(path, "wb") as f:
+            f.write(response.content)
+
+    data = np.load(path)
+
+    if "data" in data:
+        # Single hierarchy matrix
+        return [data["data"].squeeze()]
+
+    # Otherwise, assume multiple levels: level_0, level_1, ...
+    hierarchy = [data[key] for key in sorted(data.files, key=lambda k: int(k.split("_")[1]))]
+    return hierarchy
+
+
+def evaluate_query_set(model, query_set, prototypes, label_field, ball):
+    proto_labels = list(prototypes.keys())
+    proto_tensors = torch.stack([prototypes[label] for label in proto_labels])  # shape: [N_way, D]
+
+    correct = 0
+    total = len(query_set)
+    average_precisions = []
+
+    for example in query_set:
+        image = example["image"].to(DEVICE)
+        true_label = example[label_field]
+
+        query_embed = model.embed(image.unsqueeze(0))[-1]  # [D]
+        dists = ball.dist(query_embed.unsqueeze(0), proto_tensors).squeeze(0)  # shape: [N_way]
+
+        # Compute top-1 accuracy
+        pred_idx = torch.argmin(dists).item()
+        pred_label = proto_labels[pred_idx]
+        if pred_label == true_label:
+            correct += 1
+
+        # Compute AP for this example
+        sorted_indices = torch.argsort(dists)  # low distance = high rank
+        sorted_labels = [proto_labels[idx] for idx in sorted_indices]
+
+        if true_label in sorted_labels:
+            rank = sorted_labels.index(true_label)
+            average_precisions.append(1 / (rank + 1))  # Precision at the true label
+        else:
+            average_precisions.append(0.0)
+
+    acc = correct / total
+    mean_ap = sum(average_precisions) / total
+    return acc, mean_ap
+
+
+def run():
+    run_id = "ff72d8ced7aa4b7e93ca964e2cc07c48"
+    prototypes = "avg_multi"
+    n_way = 10
+    n_shot = 5
+    n_query = 15
+
+    mlflow.set_experiment("few-shot")
+
+    dataset_dict = datasets.load_dataset("jkbkaiser/clibdb_unseen")
+    full_dataset = datasets.concatenate_datasets([dataset_dict["validation"], dataset_dict["test"]])
+    ball = PoincareBallExact(c=1.5)
+
+    model = load_model(run_id, prototypes)
+
+    accuracies = []
+    aps = []
+
+    progress = tqdm.tqdm(range(500))
+
+    with mlflow.start_run():
+        mlflow.log_params({
+            "prototypes": prototypes,
+            "dataset": "clibdb",
+            "run_id": run_id,
+            "n_way": n_way,
+            "n_shot": n_shot,
+            "n_query": n_query,
+        })
+
+        for i in progress:
+            support, query = sample_few_shot_task(full_dataset, "species", n_way=n_way, n_shot=n_shot, n_query=n_query)
+            prototypes = compute_prototypes(model, support, "species", ball)
+            acc, ap = evaluate_query_set(model, query, prototypes, "species", ball)
+
+            aps.append(ap)
+            accuracies.append(acc)
+
+            mlflow.log_metrics({
+                "acc": acc,
+                "ap": ap,
+            })
+
+            avg_acc = sum(accuracies) / len(accuracies)
+            avg_ap = sum(aps) / len(aps)
+            progress.set_description(f"Avg Acc: {avg_acc:.4f} Avg AP: {avg_ap:.4f}")
+
+if __name__ == "__main__":
+    run()
+
+

@@ -67,6 +67,11 @@ class HierarchicalPoincare(nn.Module):
             for p, f in zip(self.level_prototypes, hyp_embeddings)
         ]
 
+    def embed(self, x):
+        features = self.model(x)
+        hyp_embeddings = [self.ball.expmap0(f) for f in features]
+        return hyp_embeddings
+
     def pred_fn(self, logits):
         return [logit.argmax(dim=1) for logit in logits]
 

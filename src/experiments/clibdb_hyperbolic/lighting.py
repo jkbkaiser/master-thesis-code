@@ -99,6 +99,9 @@ class LightningGBIF(L.LightningModule):
     def forward(self, x):
         return self.model(x)
 
+    def embed(self, x):
+        return self.model.embed(x)
+
     def configure_optimizers(self):
         params = filter(lambda p: p.requires_grad, self.model.parameters())
 
