@@ -69,7 +69,7 @@ class HierarchicalPoincareRest(nn.Module):
         features = self.model(x)
         hyp_embeddings = [self.ball.expmap0(f) for f in features]
 
-        # Compute logits only for active levels
+        # Compute logits only for active levels (from bottom up)
         active_features = hyp_embeddings[-self.num_active_levels:]
         active_prototypes = self.split_prototypes[-self.num_active_levels:]
 
@@ -78,21 +78,26 @@ class HierarchicalPoincareRest(nn.Module):
             for p, f in zip(active_prototypes, active_features)
         ]
 
-        # Initialize full logits with None
         logits_full = [None for _ in range(self.num_levels)]
 
-        # Fill in the active levels (from bottom up)
+        # Fill in bottom logits (computed)
         for i, l in enumerate(range(self.num_levels - self.num_active_levels, self.num_levels)):
             logits_full[l] = logits_active[i]
 
-        # Marginalize missing levels using hierarchy
-        for i in reversed(range(self.num_levels - self.num_active_levels)):
-            # Parent = i, Child = i+1
-            child_logits = logits_full[i + 1]  # shape: [B, num_children]
-            mapping = self.hierarchy_maps[i].float().to(child_logits.device)  # shape: [num_parents, num_children]
+        # Trace up from predicted species
+        with torch.no_grad():
+            species_logits = logits_full[-1]  # deepest level
+            pred_species = species_logits.argmax(dim=1)  # [B]
 
-            # Use matrix multiplication: [B, num_children] @ [num_children, num_parents] -> [B, num_parents]
-            logits_full[i] = child_logits @ mapping.T
+            for i in reversed(range(self.num_levels - self.num_active_levels)):
+                # i is parent of i+1
+                mapping = self.hierarchy_maps[i].to(species_logits.device)  # [num_parents, num_children]
+                pred_parent = mapping[:, pred_species].T  # [B, num_parents] binary
+
+                # Convert binary mask to logits: 1.0 for predicted, -inf otherwise
+                logits = torch.full_like(pred_parent, fill_value=float('-inf'))
+                logits[pred_parent.bool()] = 0.0  # log(1)
+                logits_full[i] = logits
 
         return logits_full
 
