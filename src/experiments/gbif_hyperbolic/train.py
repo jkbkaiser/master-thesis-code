@@ -17,7 +17,7 @@ CHECKPOINT_DIR = os.environ["CHECKPOINT_DIR"]
 
 
 def get_model_architecture(model, ds: Dataset):
-    if model in ["hyperbolic-genus-species", "single"]:
+    if model in ["hyperbolic-genus-species", "single", "euclidean"]:
         return ds.labelcount_per_level
     else:
         return ds.labelcount_per_level[-1]
