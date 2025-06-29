@@ -1,6 +1,7 @@
 import geoopt
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class Mlp(nn.Module):
@@ -33,7 +34,7 @@ class ClassifierModule(nn.Module):
 
 
 class HierarchicalPoincareRest(nn.Module):
-    def __init__(self, backbone, in_features, architecture, prototypes, num_active_levels=None, **_):
+    def __init__(self, backbone, in_features, architecture, prototypes, ds, num_active_levels=None, **_):
         super().__init__()
 
         print("Instantiating HierarchicalPoincareRest")
@@ -57,29 +58,42 @@ class HierarchicalPoincareRest(nn.Module):
 
         self.ball = geoopt.PoincareBallExact(c=1.5)
 
+        # Store hierarchy mappings from dataset
+        self.hierarchy_maps = [torch.tensor(H.T, device=prototypes.device) for H in ds.hierarchy]
+
     def _split_prototypes(self, prototypes, level_sizes):
         splits = torch.split(prototypes, level_sizes, dim=0)
         return list(splits)
 
     def forward(self, x):
-        features = self.model(x)[-self.num_active_levels:]  # bottom-up
-        hyp_embeddings = [self.ball.expmap0(f) for f in features]
-        return [
+        all_features = self.model(x)  # all levels
+        active_features = all_features[-self.num_active_levels:]  # bottom-up active features
+        hyp_embeddings = [self.ball.expmap0(f) for f in active_features]
+        logits_active = [
             -self.ball.dist(p[None, :, :], f[:, None, :]) / 0.07
             for p, f in zip(self.level_prototypes, hyp_embeddings)
         ]
+
+        # Reconstruct full logits via marginalization for missing top levels
+        logits_full = [None] * self.num_levels
+        logits_full[-self.num_active_levels:] = logits_active
+
+        for i in reversed(range(self.num_levels - self.num_active_levels)):
+            # logsumexp over children logits weighted by known hierarchy
+            child_logits = logits_full[i + 1]  # shape [B, num_children]
+            mapping = self.hierarchy_maps[i].float()  # shape [num_children, num_parents]
+            logits_full[i] = torch.logsumexp(child_logits @ mapping, dim=1, keepdim=True).repeat(1, self.level_sizes[i])
+
+        return logits_full
 
     def embed(self, x):
         features = self.model(x)[-self.num_active_levels:]
         return [self.ball.expmap0(f) for f in features]
 
     def pred_fn(self, logits):
-        logits = logits[-self.num_active_levels:]
         return [logit.argmax(dim=1) for logit in logits]
 
     def loss_fn(self, logits, *targets):
-        logits = logits[-self.num_active_levels:]
-        targets = targets[-self.num_active_levels:]
         losses = [self.criterion(logit, target) for logit, target in zip(logits, targets)]
         weights = torch.tensor([2**i for i in range(len(losses))], dtype=torch.float32, device=logits[0].device)
         weights /= weights.sum()

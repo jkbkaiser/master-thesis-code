@@ -80,7 +80,7 @@ class LightningGBIF(L.LightningModule):
         self.ds = ds
         self.optimizer_name = optimizer_name
         self.optimizer_hparams = optimizer_hparams
-        self.num_active_levels = model_hparams["num_active_levels"]
+        # self.num_active_levels = model_hparams["num_active_levels"]
 
         self.model = create_model(model_hparams, ds)
         self.pred_fn = self.model.pred_fn
@@ -125,7 +125,7 @@ class LightningGBIF(L.LightningModule):
         loss = self.loss_fn(logits, *labels)
         preds = self.pred_fn(logits)
 
-        metrics = self.metric.process_batch(preds, labels[-self.num_active_levels:], logits, split="train")
+        metrics = self.metric.process_batch(preds, labels, logits, split="train")
 
         self.log_epoch(loss, "train_loss")
         self.log_epoch(metrics, "train_")
@@ -140,7 +140,7 @@ class LightningGBIF(L.LightningModule):
         logits = self(imgs)
         preds = self.pred_fn(logits)
 
-        metrics = self.metric.process_batch(preds, labels[-self.num_active_levels:], logits, split="valid")
+        metrics = self.metric.process_batch(preds, labels, logits, split="valid")
 
         self.log_epoch(metrics, "valid_")
 
