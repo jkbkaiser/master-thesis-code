@@ -8,6 +8,7 @@ import torch.optim as optim
 from src.experiments.bioscan_hyperbolic.models import HierarchicalPoincare
 from src.shared.datasets import DatasetVersion
 from src.shared.datasets.bioscan import BioscanDataset
+
 from src.shared.prototypes import get_prototypes
 from src.shared.torch.backbones import (ViTAEv2_B, load_for_transfer_learning,
                                         t2t_vit_t_14)

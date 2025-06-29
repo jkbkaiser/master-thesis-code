@@ -19,6 +19,6 @@ HPARAMS_FILE=$HOME/master-thesis-code/jobs/few_shot/few_shot_hyperparameters.txt
 
 python -m src.experiments.gbif_hyperbolic.evaluation.main \
     --n_query 15 \
-    --run_id f0cc7da892014fb4b5ed989a6ad012e0 \
-    --prototypes entailment_cones \
+    --run_id 76f2e51e048949cdbb2cedc658e9a4e1 \
+    --prototypes avg_multi \
     $(head -$SLURM_ARRAY_TASK_ID $HPARAMS_FILE | tail -1)

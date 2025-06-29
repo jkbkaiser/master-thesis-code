@@ -10,7 +10,7 @@ from src.constants import CACHE_DIR, GOOGLE_BUCKET_URL
 
 class DatasetSplit(str, Enum):
     TRAIN = "train"
-    VALID = "valid"
+    VALID = "validation"
     TEST = "test"
 
 
