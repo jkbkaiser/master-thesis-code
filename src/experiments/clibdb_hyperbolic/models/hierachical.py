@@ -61,16 +61,20 @@ class HierarchicalPoincare(nn.Module):
 
     def forward(self, x):
         features = self.model(x)
-        hyp_embeddings = [self.ball.expmap0(f) for f in features]
+        # hyp_embeddings = [self.ball.expmap0(f) for f in features]
+
         return [
-            -self.ball.dist(p[None, :, :], f[:, None, :]) / 0.07
-            for p, f in zip(self.level_prototypes, hyp_embeddings)
+            - torch.cdist(f, p) / 0.07
+            # -self.ball.dist(p[None, :, :], f[:, None, :]) / 0.07
+            # -self.ball.dist(p[None, :, :], f[:, None, :]) / 0.07
+            for p, f in zip(self.level_prototypes, features)
         ]
 
     def embed(self, x):
         features = self.model(x)
-        hyp_embeddings = [self.ball.expmap0(f) for f in features]
-        return hyp_embeddings
+        # hyp_embeddings = [self.ball.expmap0(f) for f in features]
+        # return hyp_embeddings
+        return features
 
     def pred_fn(self, logits):
         return [logit.argmax(dim=1) for logit in logits]
