@@ -6,6 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=9
 #SBATCH --time=01:30:00
+#SBATCH --array=1-5%5
 #SBATCH --output=./logs/job_outputs/slurm_output_%A.out
 
 module purge
@@ -23,9 +24,10 @@ python -m src.experiments.clibdb_hyperbolic.train \
     --prototypes entailment_cones \
     --num-epochs 20 \
     --batch-size 64 \
-    --num-active-levels 2
+    $(head -$SLURM_ARRAY_TASK_ID $HPARAMS_FILE | tail -1)
+
+
+    #--num-active-levels 2
 
 
 
-    #testSBATCH --array=1-5%5
-    # $(head -$SLURM_ARRAY_TASK_ID $HPARAMS_FILE | tail -1)
