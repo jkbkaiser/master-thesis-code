@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class Mlp(nn.Module):
@@ -56,7 +55,6 @@ class GenusSpeciesEuclidean(nn.Module):
     def forward(self, x):
         [feature_genus, feature_species] = self.model(x)
 
-        # Euclidean distance to each prototype
         dists_genus = torch.cdist(feature_genus, self.genus_prototypes)  # [B, num_genus]
         dists_species = torch.cdist(feature_species, self.species_prototypes)  # [B, num_species]
 

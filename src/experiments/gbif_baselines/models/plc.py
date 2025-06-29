@@ -25,9 +25,7 @@ class PLC(nn.Module):
         else:
             self.model = ClassifierModule(out_features, architecture)
 
-        self.criterion = nn.CrossEntropyLoss(
-            # label_smoothing=0.1
-        )
+        self.criterion = nn.CrossEntropyLoss()
 
     def forward(self, x):
         return self.model(x)

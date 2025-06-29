@@ -21,4 +21,3 @@ print(f"Total species in training: {len(train_species)}")
 print(f"Total species in validation: {len(val_species)}")
 print(f"Species overlap: {len(common_species)} ({len(common_species) / len(val_species) * 100:.2f}%)")
 print(f"Species only in validation: {len(val_only_species)} ({len(val_only_species) / len(val_species) * 100:.2f}%)")
-

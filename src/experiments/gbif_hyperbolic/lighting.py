@@ -6,7 +6,7 @@ import lightning as L
 import torch
 
 from src.experiments.gbif_hyperbolic.models.euclidean_genus_species import \
-    GenusSpeciesEucldiean
+    GenusSpeciesEuclidean
 from src.experiments.gbif_hyperbolic.models.hyperbolic_genus_species import \
     GenusSpeciesPoincare
 from src.experiments.gbif_hyperbolic.models.hyperbolic_uniform import \
@@ -14,7 +14,8 @@ from src.experiments.gbif_hyperbolic.models.hyperbolic_uniform import \
 from src.experiments.gbif_hyperbolic.models.hypersphere import Hyperspherical
 from src.experiments.gbif_hyperbolic.models.single_classifier import \
     SingleClassifier
-from src.shared.datasets import Dataset, DatasetVersion
+from src.shared.datasets import DatasetVersion
+from src.shared.datasets.gbif import Dataset
 from src.shared.prototypes import get_prototypes
 from src.shared.torch.backbones import (ViTAEv2_B, load_for_transfer_learning,
                                         t2t_vit_t_14)
@@ -31,7 +32,7 @@ MODEL_DICT = {
     "hyperbolic-uniform": HyperbolicUniform,
     "hyperbolic-genus-species": GenusSpeciesPoincare,
     "single": SingleClassifier,
-    "euclidean": GenusSpeciesEucldiean,
+    "euclidean": GenusSpeciesEuclidean,
 }
 
 BACKBONE_DICT = {
@@ -50,11 +51,7 @@ def create_model(model_name, model_hparams, ds):
         backbone = None
     else:
         init, path_to_weights, out_features = BACKBONE_DICT[model_hparams["backbone_name"]]
-        backbone = init(
-            # drop_rate=0.0,
-            # attn_drop_rate=0.0,
-            # drop_path_rate=0.0,
-        )
+        backbone = init()
 
         load_for_transfer_learning(
             backbone,
@@ -105,7 +102,6 @@ class LightningGBIF(L.LightningModule):
         self.model = create_model(model_name, model_hparams, ds)
 
         self.freeze_backbone = model_hparams["freeze_backbone"]
-        # self.freeze_epochs = model_hparams["freeze_epochs"]
 
         self.pred_fn = self.model.pred_fn
         self.loss_fn = self.model.loss_fn

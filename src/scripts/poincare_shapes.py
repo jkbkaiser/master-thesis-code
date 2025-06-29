@@ -38,8 +38,6 @@ def plot_points(points, color="r"):
             for t in timesteps_pairs
         ])
 
-        # ax.plot(points[:, 0], points[:, 1], 'ro')
-
         for i in range(len(points) - 1):
             ax.plot([points[i, 0], points[i + 1, 0]], [points[i, 1], points[i + 1, 1]], color)
 

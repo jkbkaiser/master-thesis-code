@@ -2,7 +2,6 @@ import geoopt
 import torch.nn as nn
 
 
-
 class Mlp(nn.Module):
     def __init__(self, in_features, hidden_features, out_features):
         super().__init__()

@@ -11,15 +11,9 @@ from pathlib import Path
 
 import aiofiles
 import aiohttp
-import datasets
 import pandas as pd
-from datasets import Features, Image, Value, load_dataset
 from PIL import Image as PILImage
-from PIL import UnidentifiedImageError
 from tqdm import tqdm
-from tqdm.asyncio import tqdm_asyncio
-
-from src.constants import NUM_PROC
 
 logging.basicConfig(level=logging.INFO)
 
@@ -274,8 +268,6 @@ def run(args):
     print(len(df))
 
     print("Downloading images...")
-
-    # asyncio.run(download_gbif_entries_parallel_async(df, batch_size=5000))
 
     asyncio.run(download(df, batch_size=5000))
 

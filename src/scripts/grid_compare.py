@@ -1,42 +1,15 @@
-import json
-import uuid
 from typing import cast
 
 import datasets
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
-import requests
 
-from src.constants import CACHE_DIR, GOOGLE_BUCKET_URL, NUM_PROC
-from src.shared.datasets import DatasetVersion
+from src.constants import NUM_PROC
+from src.shared.datasets import DatasetVersion, get_metadata
 
 VERSION = DatasetVersion.GBIF_GENUS_SPECIES_100K
 path = f"jkbkaiser/{VERSION.value}"
 dataset_dict = cast(datasets.DatasetDict, datasets.load_dataset(path, num_proc=NUM_PROC))
-
-
-def get_metadata(version, reload: bool):
-    directory = CACHE_DIR / version.value
-    path = directory / "metadata.json"
-
-    if reload or not path.is_file():
-        url = f"{GOOGLE_BUCKET_URL}/{version.value}/metadata.json?id={uuid.uuid4()}"
-
-        response = requests.get(url)
-        if response.status_code != 200:
-            raise Exception(f"Could not retrieve metadata for {version.value}, status: {response.status_code}")
-        metadata = response.json()
-
-        if not directory.exists():
-            directory.mkdir(parents=True)
-
-        with open(path, "w") as f:
-            json.dump(metadata, f)
-
-        return metadata
-
-    with open(path, "r") as f:
-        return json.load(f)
 
 ds = dataset_dict["train"].select(range(10000))
 

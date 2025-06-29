@@ -5,8 +5,8 @@ import torch
 import tqdm
 from datasets import Dataset, DatasetDict
 
-from src.shared.datasets import Dataset as MyDataset
 from src.shared.datasets import DatasetVersion
+from src.shared.datasets.gbif import Dataset as MyDataset
 from src.shared.torch.backbones import load_for_transfer_learning, t2t_vit_t_14
 
 torch.set_float32_matmul_precision("medium")
@@ -26,11 +26,9 @@ load_for_transfer_learning(
     strict=False,
 )
 
-# Ensure the model is in eval mode
 backbone.eval()
 backbone.head = torch.nn.Identity()
 
-# Your train_loader should yield (inputs, labels)
 def extract_embeddings(loader, model):
     all_embeddings = []
     all_genus_labels = []

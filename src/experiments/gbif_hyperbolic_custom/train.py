@@ -9,7 +9,8 @@ from lightning.pytorch.loggers import MLFlowLogger
 
 from src.experiments.gbif_hyperbolic_custom.lighting import (MODEL_DICT,
                                                              LightningGBIF)
-from src.shared.datasets import Dataset, DatasetVersion
+from src.shared.datasets import DatasetVersion
+from src.shared.datasets.gbif import Dataset
 from src.shared.prototypes import PrototypeVersion
 
 load_dotenv()
@@ -17,14 +18,10 @@ MLFLOW_SERVER = os.environ["MLFLOW_SERVER"]
 CHECKPOINT_DIR = os.environ["CHECKPOINT_DIR"]
 
 
-def get_model_architecture(model, ds: Dataset):
-    return ds.labelcount_per_level
-
-
 def run(args):
     ds = Dataset(args.dataset)
     ds.load(batch_size=args.batch_size, use_torch=True)
-    architecture = get_model_architecture(args.model, ds)
+    architecture = ds.labelcount_per_level
 
     mlf_logger = MLFlowLogger(
         experiment_name=args.experiment_name,

@@ -1,57 +1,41 @@
-import math
 import os
 from pathlib import Path
 
 import lightning as L
 import torch
+import torch.optim as optim
 
-from src.experiments.gbif_hyperbolic_custom.models.custom import Custom
+from src.experiments.bioscan_hyperbolic.models import HierarchicalPoincare
 from src.shared.datasets import DatasetVersion
-from src.shared.datasets.gbif import Dataset
+from src.shared.datasets.bioscan import BioscanDataset
 from src.shared.prototypes import get_prototypes
-from src.shared.torch.backbones import (load_for_transfer_learning,
-                                        t2t_vit_t_14_custom)
+from src.shared.torch.backbones import (ViTAEv2_B, load_for_transfer_learning,
+                                        t2t_vit_t_14)
 from src.shared.torch.hierarchical_metric import HierarchicalMetric
 
 PRETRAINED_WEIGHTS_DIR = Path(os.getcwd()) / "pretrained_weights"
 PRETRAINED_T2T_VITT_T14 = PRETRAINED_WEIGHTS_DIR / "81.7_T2T_ViTt_14.pth.tar"
-
-torch.set_float32_matmul_precision("high")
-
-MODEL_DICT = {
-    "custom": Custom,
-}
+PRETRAINED_VITAEv2 = PRETRAINED_WEIGHTS_DIR / "ViTAEv2-B.pth.tar"
 
 BACKBONE_DICT = {
-    "t2t_vit": (t2t_vit_t_14_custom, PRETRAINED_T2T_VITT_T14, 384),
+    "t2t_vit": (t2t_vit_t_14, PRETRAINED_T2T_VITT_T14, 384),
+    "vitaev2": (ViTAEv2_B, PRETRAINED_VITAEv2, 1024),
 }
 
+torch.set_float32_matmul_precision("medium")
 
-def create_model(model_name, model_hparams, ds):
-    prototypes = get_prototypes(model_hparams["prototypes"], ds.version.value, model_hparams["prototype_dim"])
 
-    architecture = model_hparams["architecture"]
-    taxonomic_levels = len(architecture)
-
-    level_prototypes = []
-    start = 0
-    for num_classes in architecture:
-        end = start + num_classes
-        level_prototypes.append(prototypes[start:end])
-        start = end
-
-    model_hparams["prototypes"] = level_prototypes
+def create_model(model_hparams, ds):
+    prototypes = get_prototypes(model_hparams["prototypes"], ds.version.value, 128)
+    model_hparams["prototypes"] = prototypes
 
     if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS]:
+        out_features = 384
         backbone = None
     else:
-
-        init, path_to_weights, _ = BACKBONE_DICT[model_hparams["backbone_name"]]
-        backbone = init(
-            prototypes=level_prototypes,
-            taxonomic_levels=taxonomic_levels,
-        )
-
+        # Load pretrained weights
+        init, path_to_weights, out_features = BACKBONE_DICT[model_hparams["backbone_name"]]
+        backbone = init()
         load_for_transfer_learning(
             backbone,
             path_to_weights,
@@ -59,12 +43,13 @@ def create_model(model_name, model_hparams, ds):
             strict=False,
         )
 
-    cls = MODEL_DICT[model_name]
-    model = cls(backbone)
+    cls = HierarchicalPoincare
+    model = cls(backbone, out_features, **model_hparams, ds=ds)
 
     if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS]:
         pass
     else:
+
         if model_hparams["freeze_backbone"]:
             print("Freezing backbone")
             for param in model.model.parameters():
@@ -76,34 +61,25 @@ def create_model(model_name, model_hparams, ds):
     return model
 
 
-def linear_warmup_cosine_decay(warmup_steps, total_steps):
-    def lr_lambda(current_step):
-        if current_step < warmup_steps:
-            return float(current_step) / float(max(1, warmup_steps))
-        progress = float(current_step - warmup_steps) / float(max(1, total_steps - warmup_steps))
-        return 0.5 * (1.0 + math.cos(math.pi * progress))
-    return lr_lambda
-
-
 class LightningGBIF(L.LightningModule):
     def __init__(
         self,
-        model_name,
         model_hparams,
         optimizer_name,
         optimizer_hparams,
-        ds: Dataset,
+        ds: BioscanDataset,
     ):
         super().__init__()
         self.ds = ds
         self.optimizer_name = optimizer_name
         self.optimizer_hparams = optimizer_hparams
-        self.model = create_model(model_name, model_hparams, ds)
 
-        self.freeze_backbone = model_hparams["freeze_backbone"]
-
+        self.model = create_model(model_hparams, ds)
         self.pred_fn = self.model.pred_fn
         self.loss_fn = self.model.loss_fn
+
+        self.num_classes_per_level = ds.labelcount_per_level
+        self.num_levels = len(self.num_classes_per_level)
 
         self.metric = HierarchicalMetric(ds, ds.labelcount_per_level)
 
@@ -118,20 +94,24 @@ class LightningGBIF(L.LightningModule):
     def forward(self, x):
         return self.model(x)
 
+    def embed(self, x):
+        return self.model.embed(x)
+
     def configure_optimizers(self):
-        lr = self.optimizer_hparams["learning_rate"]
-        weight_decay = self.optimizer_hparams["weight_decay"]
-
         params = filter(lambda p: p.requires_grad, self.model.parameters())
-        optimizer = torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
 
-        return {"optimizer": optimizer}
+        optim_dict = {
+            "adam": optim.AdamW,
+            "sgd": optim.SGD,
+        }
+
+        optimizer = optim_dict[self.optimizer_name](params, **self.optimizer_hparams)
+        return [optimizer]
 
     def training_step(self, batch):
         self.log("step", self.current_epoch)
 
-        imgs = batch[0]
-        labels = batch[1:]
+        imgs, *labels = batch
 
         logits = self(imgs)
         loss = self.loss_fn(logits, *labels)
@@ -148,15 +128,17 @@ class LightningGBIF(L.LightningModule):
         return loss
 
     def validation_step(self, batch):
-        imgs = batch[0]
-        labels = batch[1:]
-
+        imgs, *labels = batch
         logits = self(imgs)
         preds = self.pred_fn(logits)
 
         metrics = self.metric.process_batch(preds, labels, logits, split="valid")
+
         self.log_epoch(metrics, "valid_")
 
     def on_validation_epoch_end(self):
-        recall_metrics = self.metric.compute_recall()
-        self.log_epoch(recall_metrics, "valid_recall_")
+        recall_stats = self.metric.compute_recall()
+        self.log_epoch(recall_stats, "valid_")
+
+        lca = self.metric.compute_lca_stats()
+        self.log_epoch(lca, "valid_")

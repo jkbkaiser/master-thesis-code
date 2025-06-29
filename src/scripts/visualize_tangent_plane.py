@@ -39,40 +39,21 @@ proj_x = px + curve_u
 proj_y = py + curve_v
 proj_z = pz + dz_dx * curve_u + dz_dy * curve_v
 
-# Plot
 fig = plt.figure(figsize=(10, 8))
 ax = fig.add_subplot(111, projection='3d')
 
-# Surface
 ax.plot_surface(x, y, z, color='lightgray', alpha=0.6, linewidth=0)
-
-# Tangent plane
 ax.plot_surface(tx, ty, tz, alpha=0.8, color='#4C72B0')
-
-# # Tangent vectors
-# ax.quiver(*p, *du, length=0.4, color='#55A868', normalize=True)
-# ax.quiver(*p, *dv, length=0.4, color='#C44E52', normalize=True)
-#
-# # Normal vector
-# normal = np.cross(du, dv)
-# ax.quiver(*p, *normal, length=0.4, color='#8172B2', normalize=True)
-
-# Curve on surface
 ax.plot(curve_x, curve_y, curve_z, color='#117733', label='Curve on surface', linewidth=2)
-
-# Projection of curve onto tangent plane
 ax.plot(proj_x, proj_y, proj_z, color='#882255', linestyle='--', label='Projection', linewidth=2)
 
-# Point label
-ax.text(*(p + 0.1), "p", color='black', fontsize=20)
+ax.text(*(p + 0.5), "p", color='black', fontsize=20)
 
-# Appearance settings
 ax.set_xticks([])
 ax.set_yticks([])
 ax.set_zticks([])
 ax.set_axis_off()
 ax.set_box_aspect([1, 1, 1])
-# ax.set_title("Tangent Space to a Hyperbolic Surface at Point $p$", pad=20)
 plt.legend()
 plt.tight_layout()
 plt.show()

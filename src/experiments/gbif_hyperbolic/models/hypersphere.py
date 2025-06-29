@@ -18,7 +18,7 @@ class Mlp(nn.Module):
 
 
 class Hyperspherical(nn.Module):
-    def __init__(self, backbone, out_features, architecture, prototypes, **_):
+    def __init__(self, backbone, out_features, prototypes, **_):
         super().__init__()
 
         if backbone is not None:
@@ -38,5 +38,5 @@ class Hyperspherical(nn.Module):
     def pred_fn(self, logits):
         return logits.argmax(dim=1)
 
-    def loss_fn(self, logits, genus_labels, species_labels):
+    def loss_fn(self, logits, species_labels):
         return self.criterion(logits, species_labels)

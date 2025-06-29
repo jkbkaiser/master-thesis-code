@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 from mpl_toolkits.mplot3d.proj3d import proj_transform
+from PIL import Image
 
 from src.constants import NUM_PROC
 from src.shared.datasets import DatasetVersion
@@ -124,10 +125,8 @@ ab = AnnotationBbox(
     boxcoords="offset points",
     frameon=True,
     bboxprops=dict(edgecolor='white', linewidth=1),
-    # arrowprops=dict(arrowstyle="->", color="black")
 )
 
-# Add the annotation
 ax.add_artist(ab)
 
 ax.text(v1[0], v1[1] - 0.5, v1[2], 'Harmonia axyridis', color='black', fontsize=10)
@@ -136,10 +135,6 @@ ax.text(v3[0] + 0.6, v3[1] - 0.2, v3[2], 'Anantis ocellata', color='black', font
 plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
 fig.savefig("your_figure.png", dpi=600, bbox_inches='tight', pad_inches=0.1)
 
-
-from PIL import Image
-
-# Load the image
 input_path = "your_figure.png"
 output_path = "your_figure_cropped.png"
 
@@ -148,13 +143,10 @@ with Image.open(input_path) as img:
     crop = 1100
     print(width, height)
 
-    # Define the crop box (left, upper, right, lower)
     crop_box = (crop, crop, width - crop, height - crop)
 
-    # Perform the crop
     cropped_img = img.crop(crop_box)
 
-    # Save the result
     cropped_img.save(output_path)
 
 print(f"Cropped image saved to {output_path}")

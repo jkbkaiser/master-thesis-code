@@ -8,7 +8,8 @@ from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from lightning.pytorch.loggers import MLFlowLogger
 
 from src.experiments.gbif_hyperbolic.lighting import MODEL_DICT, LightningGBIF
-from src.shared.datasets import Dataset, DatasetVersion
+from src.shared.datasets import DatasetVersion
+from src.shared.datasets.gbif import Dataset
 from src.shared.prototypes import PrototypeVersion
 
 load_dotenv()

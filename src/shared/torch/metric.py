@@ -109,30 +109,24 @@ class Metric():
         for k in [5, 10, 50, 100]:
             mask = (freq <= k)
 
-            # Raw counts for micro recall
             tp = (tp_per_class * mask).sum()
             fn = (fn_per_class * mask).sum()
             recalls[f"micro_recall_{k}"] = (tp / (tp + fn).clamp(min=1)).item()
 
-            # Macro recall (equal class weight)
             class_recalls = per_class_recall[mask & nonzero_mask]
             recalls[f"macro_recall_{k}"] = class_recalls.mean().item()
 
-            # Weighted recall (by support)
             class_support = support[mask]
             weight = class_support / class_support.sum().clamp(min=1)
             weighted_recall = (per_class_recall[mask] * weight).sum()
             recalls[f"support_weighted_recall_{k}"] = weighted_recall.item()
 
-        # Global micro recall
         tp = tp_per_class.sum()
         fn = fn_per_class.sum()
         recalls["micro_recall_all"] = (tp / (tp + fn).clamp(min=1)).item()
 
-        # Global macro recall
         recalls["macro_recall_all"] = per_class_recall.mean().item()
 
-        # Global support-weighted recall
         weight = support / support.sum().clamp(min=1)
         weighted_recall = (per_class_recall * weight).sum()
         recalls["support_weighted_recall_all"] = weighted_recall.item()

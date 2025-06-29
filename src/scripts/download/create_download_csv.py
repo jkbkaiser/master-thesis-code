@@ -2,9 +2,6 @@ import argparse
 from pathlib import Path
 
 import pandas as pd
-from PIL import Image as PILImage
-
-from src.constants import NUM_PROC
 
 DATA_DIR = Path("./data")
 GBIF_DATA_DIR = DATA_DIR / "gbif"

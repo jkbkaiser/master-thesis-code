@@ -2,8 +2,6 @@ from pathlib import Path
 
 import datasets
 from datasets import Features, Image, Value, load_dataset
-from PIL import Image as PILImage
-from PIL import UnidentifiedImageError
 
 DATA_DIR = Path("./data")
 GBIF_DATA_DIR = DATA_DIR / "gbif"
@@ -11,24 +9,6 @@ HF_DATA_DIR = DATA_DIR / "hf"
 HF_IMG_DIR = HF_DATA_DIR / "images"
 
 HUGGING_FACE_DATASET = "jkbkaiser/gbif_coleoptera_eu_full"
-
-# def filter_existing_fields(ds):
-#     def validate_row(row):
-#         if row["image"] is None:
-#             print("No image")
-#             return False
-#         try:
-#             with PILImage.open(row["image"]["path"]) as img:
-#                 # print("No valid image")
-#                 img.verify()
-#             return True
-#         except (UnidentifiedImageError, IOError):
-#             print("other issue")
-#             return False
-#
-#     ds = ds.cast_column("image", Image(decode=False))
-#     ds = ds.filter(validate_row)
-#     return ds
 
 
 def preprocess_dataset(ds):

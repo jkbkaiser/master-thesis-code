@@ -1,17 +1,7 @@
-import argparse
 import os
-from pathlib import Path
 
 import mlflow
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
 from dotenv import load_dotenv
-
-from src.constants import DEVICE
-from src.shared.datasets import ClibdbDataset, Dataset, DatasetVersion
 
 load_dotenv()
 
