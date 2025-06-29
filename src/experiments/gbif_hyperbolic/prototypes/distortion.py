@@ -32,7 +32,7 @@ def build_hierarchical_graph(hierarchy_matrices, level_names):
     level_offsets = []
     node_labels = {}  # index → name
 
-    # Calculate offsets for index uniqueness across levels
+    # Add nodes for each level, keep track of offsets
     for names in level_names:
         level_offsets.append(node_index)
         for name in names:
@@ -40,13 +40,17 @@ def build_hierarchical_graph(hierarchy_matrices, level_names):
             node_labels[name] = node_index
             node_index += 1
 
-    # Add a virtual root
-    root_index = -1
+    # Add a virtual root at the end
+    root_index = node_index
     G.add_node(root_index, label="root")
-    for i in range(len(level_names[0])):
-        G.add_edge(root_index, level_offsets[0] + i)
 
-    # Add edges per level
+    # Connect root to all top-level nodes (e.g., classes)
+    top_level_offset = level_offsets[0]
+    num_top_level = len(level_names[0])
+    for i in range(num_top_level):
+        G.add_edge(root_index, top_level_offset + i)
+
+    # Add edges for all levels based on hierarchy matrices
     for level in range(len(hierarchy_matrices)):
         mat = hierarchy_matrices[level]
         parent_offset = level_offsets[level]
@@ -60,7 +64,44 @@ def build_hierarchical_graph(hierarchy_matrices, level_names):
                     child_idx = child_offset + j
                     G.add_edge(parent_idx, child_idx)
 
-    return G
+    return G, root_index
+
+
+# def build_hierarchical_graph(hierarchy_matrices, level_names):
+#     G = nx.DiGraph()
+#     node_index = 0
+#     level_offsets = []
+#     node_labels = {}  # index → name
+#
+#     # Calculate offsets for index uniqueness across levels
+#     for names in level_names:
+#         level_offsets.append(node_index)
+#         for name in names:
+#             G.add_node(node_index, label=name)
+#             node_labels[name] = node_index
+#             node_index += 1
+#
+#     # Add a virtual root
+#     root_index = -1
+#     G.add_node(root_index, label="root")
+#     for i in range(len(level_names[0])):
+#         G.add_edge(root_index, level_offsets[0] + i)
+#
+#     # Add edges per level
+#     for level in range(len(hierarchy_matrices)):
+#         mat = hierarchy_matrices[level]
+#         parent_offset = level_offsets[level]
+#         child_offset = level_offsets[level + 1]
+#
+#         num_parents, num_children = mat.shape
+#         for i in range(num_parents):
+#             for j in range(num_children):
+#                 if mat[i, j] == 1:
+#                     parent_idx = parent_offset + i
+#                     child_idx = child_offset + j
+#                     G.add_edge(parent_idx, child_idx)
+#
+#     return G
 
 
 def get_hierarchy(dataset_version, reload: bool = False):
@@ -122,9 +163,13 @@ def run(args):
     }
 
     # Construct level_names for the graph
-    level_names = [list(id2label_dict[rank].values()) for rank in ["class", "order", "family", "subfamily", "genus", "species"] if rank in id2label_dict]
+    level_names = [
+        [v for k, v in sorted(id2label_dict[rank].items())]
+        for rank in ["class", "order", "family", "subfamily", "genus", "species"]
+        if rank in id2label_dict
+    ]
 
-    graph = build_hierarchical_graph(
+    graph, root_index = build_hierarchical_graph(
         hierarchy_matrices=hierarchy,
         level_names=level_names
     )
@@ -134,7 +179,7 @@ def run(args):
 
     dataset = HierarchyEmbeddingDataset(
         hierarchy=graph,
-        root_id=-1,
+        root_id=root_index,
         num_negs=10,
         edge_sample_from="both",
         edge_sample_strat="uniform",
@@ -156,7 +201,7 @@ def run(args):
 
     lr = 1.0
     burn_in_lr_mult = 1 / 10
-    epochs = 20
+    epochs = 10000
     burn_in_epochs = 10
     momentum = 0.9
     weight_decay = 0.0005

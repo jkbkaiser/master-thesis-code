@@ -8,11 +8,19 @@ import geoopt
 import matplotlib.pyplot as plt
 import numpy as np
 import requests
+import seaborn as sns
 import torch
 from sklearn.manifold import TSNE
 
 from src.constants import CACHE_DIR, GOOGLE_BUCKET_URL
 from src.shared.datasets import DatasetVersion
+
+labels = True
+
+# Define directory for saving results and images
+# prototype_name = "entailment_cones"  # Example prototype name, adjust as needed
+prototype_name = "genus_species_poincare"  # Example prototype name, adjust as needed
+dimensionality = 128  # Example dimensionality, adjust as needed
 
 
 def get_hierarchy(dataset_version, reload: bool = False):
@@ -39,10 +47,7 @@ def get_hierarchy(dataset_version, reload: bool = False):
     return hierarchy
 
 
-# Define directory for saving results and images
-# prototype_name = "entailment_cones"  # Example prototype name, adjust as needed
-prototype_name = "entailment_cones"  # Example prototype name, adjust as needed
-dimensionality = 128  # Example dimensionality, adjust as needed
+
 
 # Create directory named after the prototype and dimensionality
 output_dir = f'./output_results/{prototype_name}_{dimensionality}'
@@ -100,16 +105,16 @@ plt.figure(figsize=(10, 6))
 for name, norms in per_level_norms.items():
     plt.hist(norms, bins=30, alpha=0.5, label=name)
 
-# plt.xscale("log")
-# plt.yscale("log")
+if labels:
+    plt.xlabel("Hyperbolic Norm (distance to origin)")
+    plt.ylabel("Frequency")
 
-plt.xlabel("Hyperbolic Norm (distance to origin)")
-plt.ylabel("Frequency")
-plt.title("Distribution of Hyperbolic Norms per Taxonomic Level")
 plt.legend()
 plt.grid(True)
+
+sns.despine(left=True, bottom=False, top=True, right=False)
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, "poincare_norm_distribution_per_level.png"))
+plt.savefig(os.path.join(output_dir, "poincare_norm_distribution_per_level.png"), dpi=600)
 plt.show()
 
 # Plot total histogram
@@ -117,67 +122,67 @@ all_norms = torch.cat(hyperbolic_norms).cpu().numpy()
 
 plt.figure(figsize=(8, 5))
 
-# plt.xscale("log")
-# plt.yscale("log")
-
 plt.hist(all_norms, bins=50, color="gray", edgecolor="black", alpha=0.8)
-plt.xlabel("Hyperbolic Norm (distance to origin)")
-plt.ylabel("Frequency")
-plt.title("Overall Distribution of Hyperbolic Norms")
+
+if labels:
+  plt.xlabel("Hyperbolic Norm (distance to origin)")
+  plt.ylabel("Frequency")
+
+# plt.title("Overall Distribution of Hyperbolic Norms")
 plt.grid(True)
 plt.tight_layout()
-plt.savefig(os.path.join(output_dir, "poincare_norm_distribution_total.png"))
+plt.savefig(os.path.join(output_dir, "poincare_norm_distribution_total.png"), dpi=600)
 plt.show()
 
 # Compute the t-SNE projection for visualization
-proj = TSNE(n_components=2).fit_transform(prototypes)
-proj -= proj.min(axis=0)
-proj /= proj.max(axis=0)
-proj = proj * 2 - 1
-
-
-def random_walk_branch(hierarchy_levels, offsets, level_names):
-    indices_in_branch = []
-
-    # Start by randomly picking a root node at level 0
-    num_root_nodes = hierarchy_levels[0].shape[1]
-    current_parent = np.random.randint(0, num_root_nodes)
-    indices_in_branch.append(current_parent + offsets[0])
-
-    for level in range(len(hierarchy_levels)):
-        H = hierarchy_levels[level]  # shape (n_children, n_parents)
-
-        # Find children of current_parent
-        children = np.where(H[:, current_parent] == 1)[0]
-        if len(children) == 0:
-            break  # End path early if no children
-
-        current_child = np.random.choice(children)
-        indices_in_branch.append(current_child + offsets[level + 1])
-
-        current_parent = current_child
-
-    return indices_in_branch
-
-# Run the function
-indices_in_branch = random_walk_branch(hierarchy_levels, offsets, level_names)
-
-if indices_in_branch is None:
-    print("Failed to find full path after retries.")
-else:
-    branch_coords = proj[indices_in_branch]
-    plt.figure(figsize=(6, 6))
-    plt.plot(branch_coords[:, 0], branch_coords[:, 1], marker='o', linestyle='-', linewidth=2)
-
-    for i, idx in enumerate(indices_in_branch):
-        label = level_names[i] if i < len(level_names) else f"Level {i}"
-        plt.text(branch_coords[i, 0], branch_coords[i, 1], label, fontsize=10, ha='right', va='bottom')
-
-    plt.title("Full Taxonomic Branch in t-SNE Projection")
-    plt.grid(True)
-    plt.axis('equal')
-    plt.tight_layout()
-    plt.show()
+# proj = TSNE(n_components=2).fit_transform(prototypes)
+# proj -= proj.min(axis=0)
+# proj /= proj.max(axis=0)
+# proj = proj * 2 - 1
+#
+#
+# def random_walk_branch(hierarchy_levels, offsets, level_names):
+#     indices_in_branch = []
+#
+#     # Start by randomly picking a root node at level 0
+#     num_root_nodes = hierarchy_levels[0].shape[1]
+#     current_parent = np.random.randint(0, num_root_nodes)
+#     indices_in_branch.append(current_parent + offsets[0])
+#
+#     for level in range(len(hierarchy_levels)):
+#         H = hierarchy_levels[level]  # shape (n_children, n_parents)
+#
+#         # Find children of current_parent
+#         children = np.where(H[:, current_parent] == 1)[0]
+#         if len(children) == 0:
+#             break  # End path early if no children
+#
+#         current_child = np.random.choice(children)
+#         indices_in_branch.append(current_child + offsets[level + 1])
+#
+#         current_parent = current_child
+#
+#     return indices_in_branch
+#
+# # Run the function
+# indices_in_branch = random_walk_branch(hierarchy_levels, offsets, level_names)
+#
+# if indices_in_branch is None:
+#     print("Failed to find full path after retries.")
+# else:
+#     branch_coords = proj[indices_in_branch]
+#     plt.figure(figsize=(6, 6))
+#     plt.plot(branch_coords[:, 0], branch_coords[:, 1], marker='o', linestyle='-', linewidth=2)
+#
+#     for i, idx in enumerate(indices_in_branch):
+#         label = level_names[i] if i < len(level_names) else f"Level {i}"
+#         plt.text(branch_coords[i, 0], branch_coords[i, 1], label, fontsize=10, ha='right', va='bottom')
+#
+#     plt.title("Full Taxonomic Branch in t-SNE Projection")
+#     plt.grid(True)
+#     plt.axis('equal')
+#     plt.tight_layout()
+#     plt.show()
 
 
 # # Step 4: Slice out genus and species prototypes

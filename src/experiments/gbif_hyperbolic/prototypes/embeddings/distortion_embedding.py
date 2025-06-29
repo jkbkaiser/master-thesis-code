@@ -1,4 +1,12 @@
+from pathlib import Path
 from typing import Optional
+
+import numpy as np
+
+# Define save directory once outside the loop
+base = Path(f"./prototypes/clibdb/distortion")
+base.mkdir(parents=True, exist_ok=True)
+
 
 import mlflow
 import torch
@@ -16,11 +24,17 @@ from .utils.eval_tools import evaluate_edge_predictions
 
 
 def distortion_loss(
-    embeddings: torch.Tensor, dist_targets: torch.Tensor, ball: PoincareBallExact, epoch:int, max_epoch:int, mask,
+    embeddings: torch.Tensor, dist_targets: torch.Tensor, ball: PoincareBallExact, epoch:int, max_epoch:int,
 ):
     embedding_dists = ball.dist(x=embeddings[:, :, 0, :], y=embeddings[:, :, 1, :])
-    combined_mask = (dist_targets != 0) & mask
-    dist_loss = ((embedding_dists - dist_targets).abs() / (dist_targets + 1e-8))[combined_mask]
+
+    # print(embedding_dists)
+
+
+    dist_loss = (embedding_dists - dist_targets).abs() / dist_targets
+
+    # embedding_dists = ball.dist(x=embeddings[:, :, 0, :], y=embeddings[:, :, 1, :])
+    # dist_loss = (embedding_dists - dist_targets).abs() / dist_targets 
 
     norm_loss = compute_norm_loss(embeddings, dist_targets, ball, epoch, max_epoch)
 
@@ -139,7 +153,10 @@ class DistortionEmbedding(BaseEmbedding):
             for batch in dataloader:
                 edges = batch["edges"].to(self.weight.device)
                 dist_targets = batch["dist_targets"].to(self.weight.device)
-                mask = batch["mask"].to(self.weight.device)
+
+                # print("---")
+                # print(edges)
+                # print(dist_targets)
 
                 optimizer.zero_grad()
                 embeddings = self(edges)
@@ -150,9 +167,8 @@ class DistortionEmbedding(BaseEmbedding):
                     ball=self.ball,
                     epoch=epoch,
                     max_epoch = epochs,
-                    mask = mask
+                    # mask = mask
                 )
-                norm_loss *= 5
 
                 loss = dist_loss + norm_loss
 
@@ -165,6 +181,11 @@ class DistortionEmbedding(BaseEmbedding):
 
                 with torch.no_grad():
                     self.weight.data = self.ball.projx(self.weight.data)
+
+            if (epoch + 1) % 100 == 0:
+                proto_path = base / f"128_epoch{epoch + 1}.npy"
+                np.save(proto_path, self.weight.data.cpu().numpy())
+                print(f"Saved prototypes to {proto_path}")
 
             plr = optimizer.param_groups[0]["lr"]
 

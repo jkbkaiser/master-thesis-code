@@ -42,6 +42,8 @@ class HierarchyEmbeddingDataset(Dataset):
 
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         rel = self.edges_list[idx]
+        if 0 in rel:
+            return self.__getitem__((idx + 1) % len(self))
         sample = self.sampler.sample(rel=rel)
 
         # Ensure each tensor in the sample has length == 1 + num_negs

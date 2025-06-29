@@ -49,7 +49,8 @@ def create_model(model_hparams, ds):
         )
 
     # Initialize model
-    cls = HierarchicalPoincareRest
+    # cls = HierarchicalPoincareRest
+    cls = HierarchicalPoincare
     model = cls(backbone, out_features, **model_hparams, ds=ds)
 
     if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS]:

@@ -11,10 +11,10 @@ from .base import BaseEmbedding
 
 
 def poincare_embeddings_loss(
-    dists: torch.Tensor, targets: torch.Tensor, mask
+    dists: torch.Tensor, targets: torch.Tensor
 ) -> torch.Tensor:
     logits = dists.neg().exp()
-    logits = logits * mask
+    logits = logits
 
     numerator = torch.where(condition=targets, input=logits, other=0).sum(dim=-1)
     denominator = logits.sum(dim=-1)
@@ -100,14 +100,13 @@ class PoincareEmbedding(BaseEmbedding):
 
             for batch in dataloader:
                 edges = batch["edges"].to(self.weight.device)
-                mask = batch["mask"].to(self.weight.device)
                 edge_label_targets = batch["edge_label_targets"].to(self.weight.device)
 
                 optimizer.zero_grad()
 
                 dists = self(edges=edges)
 
-                poincare_loss = poincare_embeddings_loss(dists=dists, targets=edge_label_targets, mask=mask)
+                poincare_loss = poincare_embeddings_loss(dists=dists, targets=edge_label_targets)
 
                 repulsion_l = tangent_space_repulsion_loss(self.weight, self.ball) * get_repulsion_weight(epoch)
 

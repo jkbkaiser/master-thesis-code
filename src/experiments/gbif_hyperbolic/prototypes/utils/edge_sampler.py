@@ -53,11 +53,31 @@ class EdgeSampler:
             self.undirected_hierarchy = self.hierarchy.to_undirected()
             n = self.undirected_hierarchy.number_of_nodes()
             self.dist_matrix = torch.empty([n, n])
+
             # TODO: explain this stuff
             for dist_tuple in nx.shortest_path_length(self.undirected_hierarchy):
+
+                i = dist_tuple[0]
+                dists = dist_tuple[1]
+                if len(dists) < self.dist_matrix.shape[1]:
+                    print(f"Node {i} missing distances to some nodes")
+
                 distances_sorted_by_node_id = [d for n, d in sorted(dist_tuple[1].items())]
                 self.dist_matrix[dist_tuple[0], :] = torch.tensor(distances_sorted_by_node_id)
-        # TODO: Preprocessing of hierarchy should happen somewhere else.
+
+            t = (self.dist_matrix == 0).sum()
+            print("Total zero dist:", t)
+
+            zero_mask = self.dist_matrix == 0
+            off_diagonal_mask = ~torch.eye(self.dist_matrix.shape[0], dtype=torch.bool)
+            violations = torch.nonzero(zero_mask & off_diagonal_mask, as_tuple=False)
+
+            if len(violations) > 0:
+                print("Off-diagonal zero distances found at:")
+                for i, j in violations:
+                    print(f"dist_matrix[{i}, {j}] = 0")
+            else:
+                print("All zero distances are on the diagonal (as expected).")
 
         self.hierarchy.remove_node(root_id)
 
@@ -73,36 +93,14 @@ class EdgeSampler:
         edges, edge_label_targets = self.edge_sample_fn(rel=rel)
         edges = edges.to(dtype=torch.long)
 
-        target_size = self.num_negs + 1
-        num_current = edges.size(0)
-        pad_size = target_size - num_current
-
-        if pad_size > 0:
-            pad_edges = torch.full((pad_size, 2), fill_value=0, dtype=edges.dtype)
-            edges = torch.cat([edges, pad_edges], dim=0)
-
-            pad_labels = torch.zeros(pad_size, dtype=edge_label_targets.dtype)
-            edge_label_targets = torch.cat([edge_label_targets, pad_labels], dim=0)
-            mask = torch.cat([
-                torch.ones(num_current, dtype=torch.bool),
-                torch.zeros(pad_size, dtype=torch.bool)
-            ])
-        else:
-            mask = torch.ones(target_size, dtype=torch.bool)
-
         sample = {
             "edges": edges,
             "edge_label_targets": edge_label_targets,
-            "mask": mask,
         }
+
 
         if self.dist_sample_strat is not None:
             dist_targets = self.dist_sample_strat_fn(edges=edges, dist_matrix=self.dist_matrix)
-
-            if pad_size > 0:
-                pad_dists = torch.zeros(pad_size, dtype=dist_targets.dtype)
-                dist_targets = torch.cat([dist_targets, pad_dists], dim=0)
-
             sample["dist_targets"] = dist_targets
 
         return sample
