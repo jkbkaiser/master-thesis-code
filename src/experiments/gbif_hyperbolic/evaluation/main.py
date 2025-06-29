@@ -181,12 +181,12 @@ def evaluate_query_set(model, query_set, prototypes, label_field, ball):
     return acc, mean_ap
 
 
-def run():
-    run_id = "ff72d8ced7aa4b7e93ca964e2cc07c48"
-    prototypes = "avg_multi"
-    n_way = 10
-    n_shot = 5
-    n_query = 15
+def run(args):
+    run_id = args.run_id
+    prototypes = args.prototypes
+    n_way = args.n_way
+    n_shot = args.n_shot
+    n_query = args.n_query
 
     mlflow.set_experiment("few-shot")
 
@@ -219,16 +219,38 @@ def run():
             aps.append(ap)
             accuracies.append(acc)
 
+            avg_acc = sum(accuracies) / len(accuracies)
+            avg_ap = sum(aps) / len(aps)
+
             mlflow.log_metrics({
                 "acc": acc,
                 "ap": ap,
+                "avg_acc": avg_acc,
+                "avg_ap": avg_ap,
             })
 
-            avg_acc = sum(accuracies) / len(accuracies)
-            avg_ap = sum(aps) / len(aps)
             progress.set_description(f"Avg Acc: {avg_acc:.4f} Avg AP: {avg_ap:.4f}")
 
-if __name__ == "__main__":
-    run()
 
+import argparse
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Few-shot evaluation with hyperbolic prototypes")
+
+    parser.add_argument("--run_id", type=str, required=True, help="MLflow run ID to load the model from")
+    parser.add_argument("--prototypes", type=str, required=True, help="Name or path to prototype file")
+    parser.add_argument("--n_way", type=int, default=5, help="Number of classes per few-shot task")
+    parser.add_argument("--n_shot", type=int, default=1, help="Number of support examples per class")
+    parser.add_argument("--n_query", type=int, default=15, help="Number of query examples per class")
+    parser.add_argument("--n_tasks", type=int, default=500, help="Number of few-shot tasks to evaluate")
+    parser.add_argument("--dataset", type=str, default="jkbkaiser/clibdb_unseen", help="Dataset name or path")
+
+    return parser.parse_args()
+
+if __name__ == "__main__":
+    args = parse_args()
+    run(args)
+
+    #"ff72d8ced7aa4b7e93ca964e2cc07c48"
 
