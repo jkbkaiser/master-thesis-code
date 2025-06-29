@@ -6,6 +6,8 @@ import torch
 import torch.optim as optim
 
 from src.experiments.clibdb_hyperbolic.models import HierarchicalPoincare
+from src.experiments.clibdb_hyperbolic.models.hierachical_restricted import \
+    HierarchicalPoincareRest
 from src.shared.datasets import ClibdbDataset, DatasetVersion
 from src.shared.prototypes import get_prototypes
 from src.shared.torch.backbones import (ViTAEv2_B, load_for_transfer_learning,
@@ -47,7 +49,7 @@ def create_model(model_hparams, ds):
         )
 
     # Initialize model
-    cls = HierarchicalPoincare
+    cls = HierarchicalPoincareRest
     model = cls(backbone, out_features, **model_hparams, ds=ds)
 
     if ds.version in [DatasetVersion.GBIF_GENUS_SPECIES_10K_EMBEDDINGS]:

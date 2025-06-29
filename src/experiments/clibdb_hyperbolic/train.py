@@ -77,6 +77,7 @@ def parse_args():
     )
     parser.set_defaults(freeze_backbone=True)
     parser.add_argument("--num-epochs", default=50, required=False, type=int)
+    parser.add_argument("--num-active-levels", default=1, required=False, type=int)
     parser.add_argument("--batch-size", default=16, required=False, type=int)
     parser.add_argument("--eval-every", default=2, required=False, type=int)
     parser.add_argument("--seed", default=42, required=False, type=int)
@@ -125,6 +126,7 @@ def run(args):
         "prototypes": args.prototypes,
         "architecture": architecture,
         "freeze_backbone": args.freeze_backbone,
+        "num_active_levels": args.num_active_levels,
     }
 
     # if args.model == "mplc":

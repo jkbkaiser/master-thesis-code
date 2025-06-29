@@ -5,6 +5,8 @@ from pathlib import Path
 import lightning as L
 import torch
 
+from src.experiments.gbif_hyperbolic.models.euclidean_genus_species import \
+    GenusSpeciesEucldiean
 from src.experiments.gbif_hyperbolic.models.hyperbolic_genus_species import \
     GenusSpeciesPoincare
 from src.experiments.gbif_hyperbolic.models.hyperbolic_uniform import \
@@ -29,6 +31,7 @@ MODEL_DICT = {
     "hyperbolic-uniform": HyperbolicUniform,
     "hyperbolic-genus-species": GenusSpeciesPoincare,
     "single": SingleClassifier,
+    "euclidean": GenusSpeciesEucldiean,
 }
 
 BACKBONE_DICT = {
