@@ -66,25 +66,36 @@ class HierarchicalPoincareRest(nn.Module):
         return list(splits)
 
     def forward(self, x):
-        all_features = self.model(x)  # all levels
-        active_features = all_features[-self.num_active_levels:]  # bottom-up active features
-        hyp_embeddings = [self.ball.expmap0(f) for f in active_features]
+        features = self.model(x)
+        hyp_embeddings = [self.ball.expmap0(f) for f in features]
+
+        # Compute logits only for active levels
+        active_features = hyp_embeddings[-self.num_active_levels:]
+        active_prototypes = self.split_prototypes[-self.num_active_levels:]
+
         logits_active = [
             -self.ball.dist(p[None, :, :], f[:, None, :]) / 0.07
-            for p, f in zip(self.level_prototypes, hyp_embeddings)
+            for p, f in zip(active_prototypes, active_features)
         ]
 
-        # Reconstruct full logits via marginalization for missing top levels
-        logits_full = [None] * self.num_levels
-        logits_full[-self.num_active_levels:] = logits_active
+        # Initialize full logits with None
+        logits_full = [None for _ in range(self.num_levels)]
 
+        # Fill in the active levels (from bottom up)
+        for i, l in enumerate(range(self.num_levels - self.num_active_levels, self.num_levels)):
+            logits_full[l] = logits_active[i]
+
+        # Marginalize missing levels using hierarchy
         for i in reversed(range(self.num_levels - self.num_active_levels)):
-            # logsumexp over children logits weighted by known hierarchy
-            child_logits = logits_full[i + 1]  # shape [B, num_children]
-            mapping = self.hierarchy_maps[i].float()  # shape [num_children, num_parents]
-            logits_full[i] = torch.logsumexp(child_logits @ mapping, dim=1, keepdim=True).repeat(1, self.level_sizes[i])
+            # Parent = i, Child = i+1
+            child_logits = logits_full[i + 1]  # shape: [B, num_children]
+            mapping = self.hierarchy_maps[i].float().to(child_logits.device)  # shape: [num_parents, num_children]
+
+            # Use matrix multiplication: [B, num_children] @ [num_children, num_parents] -> [B, num_parents]
+            logits_full[i] = child_logits @ mapping.T
 
         return logits_full
+
 
     def embed(self, x):
         features = self.model(x)[-self.num_active_levels:]
