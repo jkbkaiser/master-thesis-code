@@ -16,17 +16,17 @@ module load 2024
 source .env
 source .venv/bin/activate
 
-HPARAMS_FILE=$HOME/master-thesis-code/jobs/clibdb/hyperparameters.txt
 
-python -m src.experiments.clibdb_hyperbolic.train \
-    -d clibdb \
+python -m src.experiments.bioscan_baselines.train \
+    -d bioscan \
+    -m plc \
     --weight-decay 0.02 \
     --learning-rate 0.0001 \
     --prototypes avg_multi \
     --num-epochs 20 \
     --batch-size 64
 
-
+# HPARAMS_FILE=$HOME/master-thesis-code/jobs/clibdb/hyperparameters.txt
     # --num-active-levels 6 \
     # $(head -$SLURM_ARRAY_TASK_ID $HPARAMS_FILE | tail -1)
     #--num-active-levels 2
