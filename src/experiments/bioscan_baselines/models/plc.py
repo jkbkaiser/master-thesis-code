@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 
@@ -33,11 +34,15 @@ class PLC(nn.Module):
         return self.model(x)
 
     def pred_fn(self, logits, *args, **kwargs):
-        [genus_logits, species_logits] = logits
-        return genus_logits.argmax(dim=1), species_logits.argmax(dim=1)
+        return [logit.argmax(dim=1) for logit in logits]
 
-    def loss_fn(self, logits, genus_labels, species_labels, *args, **kwargs):
-        [genus_logits, species_logits] = logits
-        genus_loss = self.criterion(genus_logits, genus_labels)
-        species_loss = self.criterion(species_logits, species_labels)
-        return 0.5 * genus_loss + 0.5 * species_loss
+    def loss_fn(self, logits, *targets):
+        losses = [self.criterion(logit, target) for logit, target in zip(logits, targets)]
+        weights = torch.tensor([2**i for i in range(len(losses))], dtype=torch.float32)
+        weights /= weights.sum()
+        return sum(w * loss for w, loss in zip(weights, losses))
+
+        # [genus_logits, species_logits] = logits
+        # genus_loss = self.criterion(genus_logits, genus_labels)
+        # species_loss = self.criterion(species_logits, species_labels)
+        # return 0.5 * genus_loss + 0.5 * species_loss

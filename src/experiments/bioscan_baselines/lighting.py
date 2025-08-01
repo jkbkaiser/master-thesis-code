@@ -119,8 +119,8 @@ class LightningGBIF(L.LightningModule):
         imgs, *labels = batch  # variable-length labels
 
         logits = self(imgs)
-        loss = self.loss_fn(logits, *labels, epoch=self.current_epoch)
-        preds = self.pred_fn(logits, epoch=self.current_epoch)
+        loss = self.loss_fn(logits, *labels)
+        preds = self.pred_fn(logits)
 
         # # Handle raw logits if needed
         # species_logits = logits[1] if isinstance(logits, (list, tuple)) and len(logits) == 2 else logits
