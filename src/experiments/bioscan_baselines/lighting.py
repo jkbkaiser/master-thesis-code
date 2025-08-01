@@ -5,8 +5,9 @@ import lightning as L
 import torch
 import torch.optim as optim
 
-from src.experiments.clibdb_baselines.models import HAC, MARG, MPLC, PLC
-from src.shared.datasets import ClibdbDataset, DatasetVersion
+from src.experiments.bioscan_baselines.models import HAC, MARG, MPLC, PLC
+from src.shared.datasets import DatasetVersion
+from src.shared.datasets.bioscan import BioscanDataset
 from src.shared.torch.backbones import (ViTAEv2_B, load_for_transfer_learning,
                                         t2t_vit_t_14)
 from src.shared.torch.hierarchical_metric import HierarchicalMetric
@@ -72,7 +73,7 @@ class LightningGBIF(L.LightningModule):
         model_hparams,
         optimizer_name,
         optimizer_hparams,
-        ds: ClibdbDataset,
+        ds: BioscanDataset,
     ):
         super().__init__()
         self.ds = ds

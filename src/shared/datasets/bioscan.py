@@ -10,6 +10,7 @@ import torch.utils.data as data
 import torchvision.transforms as transforms
 
 from src.constants import CACHE_DIR, GOOGLE_BUCKET_URL, NUM_PROC
+from src.shared.datasets import DatasetSplit, DatasetVersion
 
 
 class BioscanCustomDataset(data.Dataset):
@@ -124,7 +125,7 @@ class BioscanDataset():
         )
 
         transform = self._image_to_tensor if split != DatasetSplit.TRAIN else self._image_to_tensor_train
-        dataset = ClibdbCustomDataset(dataset, transform=transform, use_torch=self.use_torch)
+        dataset = BioscanCustomDataset(dataset, transform=transform, use_torch=self.use_torch)
 
         dataloader = data.DataLoader(
             dataset,
