@@ -31,7 +31,8 @@ class PLC(nn.Module):
         )
 
     def forward(self, x):
-        return self.model(x)
+        feat = self.model.forward_features(x)
+        return self.model.head(feat), feat
 
     def pred_fn(self, logits, *args, **kwargs):
         return [logit.argmax(dim=1) for logit in logits]
@@ -41,8 +42,3 @@ class PLC(nn.Module):
         weights = torch.tensor([2**i for i in range(len(losses))], dtype=torch.float32)
         weights /= weights.sum()
         return sum(w * loss for w, loss in zip(weights, losses))
-
-        # [genus_logits, species_logits] = logits
-        # genus_loss = self.criterion(genus_logits, genus_labels)
-        # species_loss = self.criterion(species_logits, species_labels)
-        # return 0.5 * genus_loss + 0.5 * species_loss

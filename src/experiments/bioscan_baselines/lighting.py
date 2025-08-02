@@ -65,7 +65,6 @@ def create_model(model_name, model_hparams, ds):
     return model
 
 
-
 class LightningGBIF(L.LightningModule):
     def __init__(
         self,
