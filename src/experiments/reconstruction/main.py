@@ -9,9 +9,9 @@ from geoopt import ManifoldParameter, ManifoldTensor, PoincareBallExact
 from torch.utils.data import DataLoader
 
 from src.constants import DEVICE
-from src.experiments.gbif_hyperbolic.prototypes.embeddings.poincare_embedding import \
+from src.experiments.prototypes.embeddings.poincare_embedding import \
     PoincareEmbedding
-from src.experiments.gbif_hyperbolic.prototypes.utils.hierarchy_embedding_dataset import \
+from src.experiments.prototypes.utils.hierarchy_embedding_dataset import \
     HierarchyEmbeddingDataset
 from src.shared.datasets import DatasetVersion, get_hierarchy, get_metadata
 from src.shared.prototypes import PrototypeVersion, get_prototypes
@@ -57,6 +57,29 @@ def build_hierarchical_graph(hierarchy_matrices, level_names):
                     G.add_edge(parent_idx, child_idx)
 
     return G, root_index
+
+
+def compute_distortion(graph: nx.DiGraph, embeddings: torch.Tensor, ball: PoincareBallExact):
+    import itertools
+
+    node_pairs = list(itertools.combinations(range(len(graph.nodes)), 2))
+
+    distortions = []
+    for u, v in node_pairs:
+        try:
+            graph_dist = nx.shortest_path_length(graph, source=u, target=v)
+        except nx.NetworkXNoPath:
+            continue  # skip unconnected pairs
+
+        if graph_dist == 0:
+            continue  # avoid divide by zero
+
+        emb_dist = ball.dist(embeddings[u].unsqueeze(0), embeddings[v].unsqueeze(0)).item()
+        distortion = abs((emb_dist / graph_dist) - 1.0)
+        distortions.append(distortion)
+
+    return sum(distortions) / len(distortions)
+
 
 
 def compute_map_score(dists: torch.Tensor):
@@ -110,11 +133,14 @@ def run(args):
         ball=ball,
     )
 
-    prototypes = get_prototypes(PrototypeVersion.DISTORTION.value, args.dataset.value, args.dims)
+    prototypes = get_prototypes(PrototypeVersion.AVG_MULTI.value, args.dataset.value, args.dims)
 
     model.weight = ManifoldParameter(
         data=ManifoldTensor(prototypes, manifold=ball).to(DEVICE)
     )
+
+    res  = compute_distortion(graph, model.weight.data, ball)
+    mlflow.log_metric("distortion", res)
 
     mean_map = 0
     mean_rank = 0

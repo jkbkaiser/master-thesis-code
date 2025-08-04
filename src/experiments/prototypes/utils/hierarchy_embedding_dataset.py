@@ -4,8 +4,7 @@ import networkx as nx
 import torch
 from torch.utils.data import Dataset
 
-from src.experiments.gbif_hyperbolic.prototypes.utils.edge_sampler import \
-    EdgeSampler
+from src.experiments.prototypes.utils.edge_sampler import EdgeSampler
 
 
 class HierarchyEmbeddingDataset(Dataset):

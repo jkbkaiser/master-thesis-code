@@ -62,23 +62,10 @@ class HierarchicalPoincare(nn.Module):
     def forward(self, x):
         features = self.model(x)
 
-        # out1 =  [
-        #     -self.ball.dist(p[None, :, :], f[:, None, :]) / 0.07
-        #     for p, f in zip(self.level_prototypes, features)
-        # ]
-
-        out =  [
-            -torch.cdist(f, p) / 0.07
+        return [
+            -self.ball.dist(p[None, :, :], f[:, None, :]) / 0.07
             for p, f in zip(self.level_prototypes, features)
         ]
-
-        # print("--------------------")
-        # print([(p.shape, f.shape) for (p, f) in zip(self.level_prototypes, features)])
-        # print("orig", [o.shape for o in out1])
-        # print([o.shape for o in out])
-        # print()
-
-        return out
 
     def embed(self, x):
         features = self.model(x)
